@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Download.py (Repo: Lynstria/AutomationMinecraftInternetBar)
-Tải TLauncher, GraalVM và versions từ Google Drive về C:\download.
+Tải TLauncher, GraalVM và versions từ Google Drive về thư mục Downloads của người dùng.
 """
 
 import os
@@ -9,11 +9,10 @@ import sys
 import time
 import glob
 import argparse
-import subprocess
 import base64
 import gdown
 
-DOWNLOAD_DIR = r"C:\download"
+DOWNLOAD_DIR = os.path.join(os.environ['USERPROFILE'], 'Downloads')
 TLAUNCHER_URL = "https://dl1.tlauncher.org/f.php?f=files%2FTLauncher-Installer-1.9.5.1.exe"
 
 def download_file(url, dest_folder):

@@ -7,35 +7,44 @@ upload.py
 
 import os
 import sys
-import shutil
 import zipfile
 import datetime
 import tempfile
-from pathlib import Path
+import requests                     # <-- ĐÃ THÊM
 from pydrive2.auth import GoogleAuth
 from pydrive2.drive import GoogleDrive
 
 MINECRAFT_DIR = os.path.join(os.environ['APPDATA'], '.tlauncher', 'legacy', 'Minecraft', 'game')
-VERSIONS_DIR = os.path.join(MINECRAFT_DIR, 'versions')
+VERSIONS_DIR_LEGACY = os.path.join(MINECRAFT_DIR, 'versions')
+VERSIONS_DIR_VANILLA = os.path.join(os.environ['APPDATA'], '.minecraft', 'versions')
 TEMP_ZIP = os.path.join(tempfile.gettempdir(), 'versions.zip')
 DRIVE_FOLDER_NAME = 'Minecraft_Map'
 FILE_NAME = 'versions.zip'
 
-def zip_versions():
-    if not os.path.exists(VERSIONS_DIR):
-        raise FileNotFoundError(f"Không tìm thấy thư mục: {VERSIONS_DIR}")
+def get_versions_dir():
+    """Trả về đường dẫn thư mục versions thực tế (ưu tiên legacy)."""
+    if os.path.exists(VERSIONS_DIR_LEGACY):
+        return VERSIONS_DIR_LEGACY
+    if os.path.exists(VERSIONS_DIR_VANILLA):
+        return VERSIONS_DIR_VANILLA
+    raise FileNotFoundError(
+        f"Không tìm thấy thư mục versions Minecraft.\n"
+        f"Đã thử: {VERSIONS_DIR_LEGACY}\n"
+        f"      {VERSIONS_DIR_VANILLA}"
+    )
 
-    print(f"[*] Đang nén {VERSIONS_DIR} -> {TEMP_ZIP}")
+def zip_versions():
+    versions_dir = get_versions_dir()
+    print(f"[*] Đang nén {versions_dir} -> {TEMP_ZIP}")
     with zipfile.ZipFile(TEMP_ZIP, 'w', zipfile.ZIP_DEFLATED) as zf:
-        for root, _, files in os.walk(VERSIONS_DIR):
+        for root, dirs, files in os.walk(versions_dir):
             for file in files:
                 full_path = os.path.join(root, file)
-                arcname = os.path.relpath(full_path, start=VERSIONS_DIR)
+                arcname = os.path.relpath(full_path, start=versions_dir)
                 zf.write(full_path, arcname=os.path.join('versions', arcname))
-            # Thư mục rỗng (optional)
-            for d in _:
+            for d in dirs:                              # <-- SỬA: dùng dirs thay vì _
                 dir_path = os.path.join(root, d)
-                arc_dir = os.path.relpath(dir_path, start=VERSIONS_DIR)
+                arc_dir = os.path.relpath(dir_path, start=versions_dir)
                 zf.write(dir_path, arcname=os.path.join('versions', arc_dir) + '/')
     print(f"[+] Đã tạo {TEMP_ZIP} ({os.path.getsize(TEMP_ZIP)} bytes)")
 
@@ -66,12 +75,11 @@ def upload_to_gdrive():
         folder_id = folder['id']
         print(f"[+] Đã tạo thư mục '{DRIVE_FOLDER_NAME}' (ID: {folder_id})")
 
-    # Tìm file versions.zip hiện có trong thư mục
+    # Tìm file versions.zip hiện có
     query = f"'{folder_id}' in parents and title = '{FILE_NAME}' and trashed = false"
     existing_files = drive.ListFile({'q': query}).GetList()
     old_file = existing_files[0] if existing_files else None
 
-    # Nếu có file cũ, đổi tên nó thành versions_YYYYMMDD_HHMMSS.zip
     if old_file:
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         new_title = f"versions_{timestamp}.zip"
@@ -80,13 +88,11 @@ def upload_to_gdrive():
         old_file.Upload()
         print(f"[+] Đã giữ lại phiên bản cũ với tên {new_title}")
 
-    # Upload file mới
     file_drive = drive.CreateFile({'title': FILE_NAME, 'parents': [{'id': folder_id}]})
     file_drive.SetContentFile(TEMP_ZIP)
     file_drive.Upload()
     print(f"[+] Đã upload {FILE_NAME} (ID: {file_drive['id']})")
 
-    # Gửi link qua Discord Webhook nếu có
     webhook_url = os.environ.get('DISCORD_WEBHOOK_URL')
     if webhook_url:
         share_link = f"https://drive.google.com/file/d/{file_drive['id']}/view?usp=sharing"

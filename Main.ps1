@@ -9,14 +9,12 @@
 $ErrorActionPreference = "Stop"
 
 # ======= CẤU HÌNH =======
-# Raw URL của các file .py trong repo của bạn
 $downloadPyUrl        = "https://raw.githubusercontent.com/Lynstria/AutomationMinecraftInternetBar/main/Minecraft/Download.py"
 $workPyUrl            = "https://raw.githubusercontent.com/Lynstria/AutomationMinecraftInternetBar/main/Minecraft/Work.py"
 $defendsPyUrl         = "https://raw.githubusercontent.com/Lynstria/AutomationMinecraftInternetBar/main/.vscode/Defends.py"
 $uploadPyUrl          = "https://raw.githubusercontent.com/Lynstria/AutomationMinecraftInternetBar/main/.vscode/Upload.py"
 $decryptSecretsPyUrl  = "https://raw.githubusercontent.com/Lynstria/AutomationMinecraftInternetBar/main/.vscode/decrypt_secrets.py"
 
-# Link Google Drive cố định (cho nhánh 1)
 $graalvmZipDriveLink  = "https://drive.google.com/file/d/1xrxfMiLBWOS2ptPOnUClHrNXOuozid_a/view?usp=sharing"
 $versionsZipDriveLink = "https://drive.google.com/file/d/1_JH04cXYbWSbhTmn3Y9jQFAf57DayWNM/view?usp=sharing"
 # =========================
@@ -38,10 +36,11 @@ function Invoke-PythonScriptInRam {
     $scriptContent = (Invoke-WebRequest -Uri $ScriptUrl -UseBasicParsing).Content
     $scriptB64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($scriptContent))
     $cmdArgs = @("-c", "import base64, sys; exec(base64.b64decode(sys.argv[1]).decode())", $scriptB64) + $Arguments
-    $proc = Start-Process -FilePath "python" -ArgumentList $cmdArgs -NoNewWindow -Wait -PassThru
-    if ($proc.ExitCode -ne 0) {
-        throw "Python script exited with code $($proc.ExitCode)"
+    $result = & python $cmdArgs 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "Python script exited with code $LASTEXITCODE. Output: $result"
     }
+    return $result
 }
 
 # Đảm bảo thư viện
@@ -60,7 +59,6 @@ do {
     switch ($choice) {
         '1' {
             Write-Host "Bắt đầu nhánh 1: Tải xuống và cài đặt..." -ForegroundColor Green
-            # Lấy nội dung Work.py để truyền qua biến môi trường
             $workScriptContent = (Invoke-WebRequest -Uri $workPyUrl -UseBasicParsing).Content
             $env:WORK_PY_B64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($workScriptContent))
             try {
@@ -75,11 +73,19 @@ do {
         '2' {
             Write-Host "Bắt đầu nhánh 2: Upload phiên bản Minecraft..." -ForegroundColor Green
             try {
-                # Bước 0: Giải mã secrets (yêu cầu nhập mật khẩu, nếu sai sẽ báo "Sai mã API")
-                Invoke-PythonScriptInRam -ScriptUrl $decryptSecretsPyUrl
+                # Bước 0: Giải mã secrets
+                $output = Invoke-PythonScriptInRam -ScriptUrl $decryptSecretsPyUrl
+                foreach ($line in $output) {
+                    if ($line -match "^DISCORD_WEBHOOK_URL=(.+)$") {
+                        $env:DISCORD_WEBHOOK_URL = $Matches[1]
+                    }
+                    if ($line -match "^GOOGLE_CREDENTIALS_PATH=(.+)$") {
+                        $env:GOOGLE_CREDENTIALS_PATH = $Matches[1]
+                    }
+                }
                 Write-Host "[✅] Secrets đã sẵn sàng." -ForegroundColor Green
 
-                # Bước 1: Xác thực OTP qua Discord
+                # Bước 1: Xác thực OTP
                 Invoke-PythonScriptInRam -ScriptUrl $defendsPyUrl
                 Write-Host "[✅] Xác thực OTP thành công." -ForegroundColor Green
 
@@ -88,6 +94,11 @@ do {
                 Write-Host "[✅] Upload hoàn tất." -ForegroundColor Green
             } catch {
                 Write-Host "Lỗi nhánh 2: $_" -ForegroundColor Red
+            } finally {
+                # Dọn file tạm Google credentials
+                if ($env:GOOGLE_CREDENTIALS_PATH) {
+                    Remove-Item $env:GOOGLE_CREDENTIALS_PATH -Force -ErrorAction SilentlyContinue
+                }
             }
         }
         '3' {

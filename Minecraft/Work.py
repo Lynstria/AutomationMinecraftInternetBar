@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Work.py (Repo: Lynstria/AutomationMinecraftInternetBar)
-- Quét thư mục download, chạy TLauncher installer.
+- Quét thư mục Downloads, chạy TLauncher installer.
 - Theo dõi tiến trình Java + TLauncher.
 - Giải nén, di chuyển version và Java.
 """
@@ -15,13 +15,16 @@ import zipfile
 import subprocess
 import psutil
 
-DOWNLOAD_DIR = r"C:\download"
+DOWNLOAD_DIR = os.path.join(os.environ['USERPROFILE'], 'Downloads')
 TLAUNCHER_DIR = os.path.join(os.environ['APPDATA'], '.tlauncher', 'legacy', 'Minecraft', 'game')
 VERSIONS_DEST = os.path.join(TLAUNCHER_DIR, 'versions')
 JAVA_DEST_ROOT = r"C:\Java"
 GRAALVM_FOLDER_NAME = "graalvm-jdk-17.0.12+8.1"
 
 def find_exe_folder():
+    tlauncher_candidates = glob.glob(os.path.join(DOWNLOAD_DIR, "TLauncher*.exe"))
+    if tlauncher_candidates:
+        return tlauncher_candidates[0]
     exes = glob.glob(os.path.join(DOWNLOAD_DIR, "*.exe"))
     if not exes:
         raise FileNotFoundError("Không tìm thấy file .exe TLauncher.")
@@ -33,6 +36,9 @@ def find_zip(pattern_hint):
         base = os.path.basename(z).lower()
         if pattern_hint.lower() in base:
             return z
+    if len(zips) >= 2:
+        print(f"[!] Không tìm thấy '{pattern_hint}' trong tên file, dùng file đầu tiên: {os.path.basename(zips[0])}")
+        return zips[0]
     raise FileNotFoundError(f"Không tìm thấy file zip chứa '{pattern_hint}'.")
 
 def wait_for_tlauncher_process():
