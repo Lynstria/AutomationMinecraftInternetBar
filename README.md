@@ -109,4 +109,4 @@ Tự động tải Python portable nếu máy chưa cài Python.
 
     AES‑256 (Fernet) từ thư viện cryptography
 
-<p align="center"> <sub>Made with ❤️ by Lynstria – Automated with AI logic</sub> </p> ```
+<p align="center"> <sub>Made with ❤️ by Lynstria – Automated with AI logic</sub> </p>
