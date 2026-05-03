@@ -36,7 +36,7 @@ def main():
         encrypted_data = f.read()
 
     for attempt in range(1, MAX_ATTEMPTS + 1):
-        password = getpass.getpass("🔑 Nhập mã bảo mật: ")
+        password = getpass.getpass("🔑 Nhập mã API: ")
         try:
             key = derive_key(password, SALT)
             f = Fernet(key)
