@@ -15,6 +15,11 @@ import gdown
 DOWNLOAD_DIR = os.path.join(os.environ['USERPROFILE'], 'Downloads')
 TLAUNCHER_URL = "https://dl1.tlauncher.org/f.php?f=files%2FTLauncher-Installer-1.9.5.1.exe"
 
+# Headers giả lập trình duyệt để tránh 403
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+}
+
 def download_file(url, dest_folder):
     os.makedirs(dest_folder, exist_ok=True)
     print(f"[Download] Đang tải: {url}")
@@ -24,7 +29,8 @@ def download_file(url, dest_folder):
         import requests
         local_filename = url.split('/')[-1].split('?')[0]
         file_path = os.path.join(dest_folder, local_filename)
-        with requests.get(url, stream=True, allow_redirects=True) as r:
+        # Thêm headers vào request
+        with requests.get(url, stream=True, allow_redirects=True, headers=HEADERS) as r:
             r.raise_for_status()
             with open(file_path, 'wb') as f:
                 for chunk in r.iter_content(chunk_size=8192):
