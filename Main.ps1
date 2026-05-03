@@ -1,7 +1,7 @@
 <#
 .SYNOPSIS
     Pipeline TLauncher & Minecraft: Download/Upload phiên bản.
-    Tự động tải Python portable nếu máy chưa cài Python thực sự.
+    Tất cả file được tải bằng PowerShell, không phụ thuộc gdown.
 .NOTES
     Repo: Lynstria/AutomationMinecraftInternetBar
 #>
@@ -14,15 +14,17 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 $env:PYTHONIOENCODING = "utf-8"
 
 # ======= CẤU HÌNH =======
+# Chỉ dùng Work.py và các script nhánh 2
 $cacheBust = "?t=" + (Get-Date -Format "yyyyMMddHHmmss")
-$downloadPyUrl        = "https://raw.githubusercontent.com/Lynstria/AutomationMinecraftInternetBar/main/Minecraft/Download.py" + $cacheBust
 $workPyUrl            = "https://raw.githubusercontent.com/Lynstria/AutomationMinecraftInternetBar/main/Minecraft/Work.py" + $cacheBust
 $defendsPyUrl         = "https://raw.githubusercontent.com/Lynstria/AutomationMinecraftInternetBar/main/.vscode/Defends.py" + $cacheBust
 $uploadPyUrl          = "https://raw.githubusercontent.com/Lynstria/AutomationMinecraftInternetBar/main/.vscode/Upload.py" + $cacheBust
 $decryptSecretsPyUrl  = "https://raw.githubusercontent.com/Lynstria/AutomationMinecraftInternetBar/main/.vscode/decrypt_secrets.py" + $cacheBust
 
-$graalvmZipDriveLink  = "https://drive.google.com/file/d/1xrxfMiLBWOS2ptPOnUClHrNXOuozid_a/view?usp=sharing"
-$versionsZipDriveLink = "https://drive.google.com/file/d/1_JH04cXYbWSbhTmn3Y9jQFAf57DayWNM/view?usp=sharing"
+# Link Google Drive – dùng ID để tạo direct link
+$graalvmFileId  = "1xrxfMiLBWOS2ptPOnUClHrNXOuozid_a"
+$versionsFileId = "1_JH04cXYbWSbhTmn3Y9jQFAf57DayWNM"
+$tlauncherUrl   = "https://dl1.tlauncher.org/f.php?f=files%2FTLauncher-Installer-1.9.5.1.exe"
 
 $pythonPortableFileId = "1YyD9-wLDuFIu5Z0O38PHF9I6iIDAt5oO"
 $pythonPortableZipUrl = "https://drive.google.com/uc?export=download&id=$pythonPortableFileId"
@@ -129,6 +131,34 @@ if ($LASTEXITCODE -ne 0) {
     }
 }
 
+# Hàm tải file từ Google Drive (xử lý confirm nếu file lớn)
+function Download-DriveFile {
+    param(
+        [string]$FileId,
+        [string]$Destination
+    )
+    $confirmUrl = "https://drive.google.com/uc?export=download&id=$FileId"
+    $webClient = New-Object System.Net.WebClient
+    $webClient.Headers.Add("User-Agent", "Mozilla/5.0")
+    try {
+        # Thử tải trực tiếp
+        $webClient.DownloadFile($confirmUrl, $Destination)
+        Write-Host "[+] Đã tải: $Destination"
+    } catch {
+        # Nếu gặp trang confirm, parse cookie và tải lại
+        $response = Invoke-WebRequest -Uri $confirmUrl -Method Get -UseBasicParsing
+        $confirmCookie = $response.Content -match 'confirm=([^"]+)'
+        if ($Matches) {
+            $confirmCode = $Matches[1]
+            $downloadUrl = "https://drive.google.com/uc?export=download&confirm=$confirmCode&id=$FileId"
+            $webClient.DownloadFile($downloadUrl, $Destination)
+            Write-Host "[+] Đã tải: $Destination"
+        } else {
+            throw "Không thể tải file từ Google Drive."
+        }
+    }
+}
+
 # Menu
 do {
     Write-Host "`n=== PIPELINE MENU ===" -ForegroundColor Yellow
@@ -140,29 +170,34 @@ do {
     switch ($choice) {
         '1' {
             Write-Host "Bắt đầu nhánh 1: Tải xuống và cài đặt..." -ForegroundColor Green
+            $downloadsDir = [Environment]::GetFolderPath("UserProfile") + "\Downloads"
+            $tlauncherExe = "$downloadsDir\TLauncher-Installer-1.9.5.1.exe"
+            $graalvmZip   = "$downloadsDir\graalvm-jdk-17.0.12_windows-x64_bin.zip"
+            $versionsZip  = "$downloadsDir\versions.zip"
+
             try {
-                $downloadsDir = [Environment]::GetFolderPath("UserProfile") + "\Downloads"
-                $tlauncherUrl = "https://dl1.tlauncher.org/f.php?f=files%2FTLauncher-Installer-1.9.5.1.exe"
-                $tlauncherExe = "$downloadsDir\TLauncher-Installer-1.9.5.1.exe"
+                # 1. Tải TLauncher (luôn tải, không kiểm tra tồn tại)
+                Write-Host "[1/3] Đang tải TLauncher..." -ForegroundColor Cyan
+                $wc = New-Object System.Net.WebClient
+                $wc.Headers.Add("User-Agent", "Mozilla/5.0")
+                $wc.DownloadFile($tlauncherUrl, $tlauncherExe)
+                Write-Host "[+] TLauncher đã tải xong." -ForegroundColor Green
 
-                Write-Host "[*] Đang tải TLauncher..." -ForegroundColor Cyan
-                $webClient = New-Object System.Net.WebClient
-                $webClient.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-                $webClient.DownloadFile($tlauncherUrl, $tlauncherExe)
-                Write-Host "[+] Đã tải TLauncher vào $tlauncherExe" -ForegroundColor Green
+                # 2. Tải GraalVM zip
+                Write-Host "[2/3] Đang tải GraalVM..." -ForegroundColor Cyan
+                Download-DriveFile -FileId $graalvmFileId -Destination $graalvmZip
 
-                $env:TLAUNCHER_READY = "1"
+                # 3. Tải versions.zip
+                Write-Host "[3/3] Đang tải Versions..." -ForegroundColor Cyan
+                Download-DriveFile -FileId $versionsFileId -Destination $versionsZip
 
-                $workScriptContent = (Invoke-WebRequest -Uri $workPyUrl -UseBasicParsing).Content
-                $env:WORK_PY_B64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($workScriptContent))
+                Write-Host "[✅] Đã tải đủ 3 file. Bắt đầu cài đặt..." -ForegroundColor Green
 
-                Invoke-PythonScriptInRam -ScriptUrl $downloadPyUrl -Arguments @("--graalvm-url", $graalvmZipDriveLink, "--versions-url", $versionsZipDriveLink)
+                # Gọi Work.py
+                Invoke-PythonScriptInRam -ScriptUrl $workPyUrl
                 Write-Host "Nhánh 1 hoàn tất." -ForegroundColor Green
             } catch {
                 Write-Host "Lỗi nhánh 1: $_" -ForegroundColor Red
-            } finally {
-                Remove-Item env:WORK_PY_B64 -ErrorAction SilentlyContinue
-                Remove-Item env:TLAUNCHER_READY -ErrorAction SilentlyContinue
             }
         }
         '2' {
