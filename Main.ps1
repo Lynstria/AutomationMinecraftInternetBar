@@ -8,11 +8,10 @@
 
 #Requires -RunAsAdministrator
 $ErrorActionPreference = "Continue"
-# Buộc PowerShell console dùng UTF-8
+
+# Thiết lập console và Python dùng UTF-8
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
-
-# Đảm bảo Python xuất ra UTF-8
 $env:PYTHONIOENCODING = "utf-8"
 
 # ======= CẤU HÌNH =======
@@ -143,19 +142,31 @@ do {
         '1' {
             Write-Host "Bắt đầu nhánh 1: Tải xuống và cài đặt..." -ForegroundColor Green
             try {
+                $downloadsDir = [Environment]::GetFolderPath("UserProfile") + "\Downloads"
+                $tlauncherUrl = "https://dl1.tlauncher.org/f.php?f=files%2FTLauncher-Installer-1.9.5.1.exe"
+                $tlauncherExe = "$downloadsDir\TLauncher-Installer-1.9.5.1.exe"
+
+                Write-Host "[*] Đang tải TLauncher..." -ForegroundColor Cyan
+                # Thêm User-Agent để tránh 403
+                $webClient = New-Object System.Net.WebClient
+                $webClient.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                $webClient.DownloadFile($tlauncherUrl, $tlauncherExe)
+                Write-Host "[+] Đã tải TLauncher vào $tlauncherExe" -ForegroundColor Green
+
+                # Báo cho Download.py biết TLauncher đã có sẵn
+                $env:TLAUNCHER_READY = "1"
+
+                # Tải Work.py và truyền qua biến môi trường
                 $workScriptContent = (Invoke-WebRequest -Uri $workPyUrl -UseBasicParsing).Content
                 $env:WORK_PY_B64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($workScriptContent))
-            } catch {
-                Write-Host "Lỗi tải Work.py" -ForegroundColor Red
-                continue
-            }
-            try {
+
                 Invoke-PythonScriptInRam -ScriptUrl $downloadPyUrl -Arguments @("--graalvm-url", $graalvmZipDriveLink, "--versions-url", $versionsZipDriveLink)
                 Write-Host "Nhánh 1 hoàn tất." -ForegroundColor Green
             } catch {
                 Write-Host "Lỗi nhánh 1: $_" -ForegroundColor Red
             } finally {
                 Remove-Item env:WORK_PY_B64 -ErrorAction SilentlyContinue
+                Remove-Item env:TLAUNCHER_READY -ErrorAction SilentlyContinue
             }
         }
         '2' {
