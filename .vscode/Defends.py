@@ -11,7 +11,7 @@ import random
 import requests
 
 # Mật khẩu gốc (dãy số sẽ bị hoán vị ngẫu nhiên)
-SECRET = "28042005"  # <-- Thay bằng mật khẩu thực của bạn
+SECRET = "147369852"  # <-- Thay bằng mật khẩu thực của bạn
 
 WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL")
 if not WEBHOOK_URL:
