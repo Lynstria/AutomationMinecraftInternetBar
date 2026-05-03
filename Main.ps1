@@ -72,14 +72,18 @@ function Invoke-PythonScriptInRam {
         [string]$ScriptUrl,
         [string[]]$Arguments
     )
-    try {
-        $scriptContent = (Invoke-WebRequest -Uri $ScriptUrl -UseBasicParsing).Content
-    } catch {
-        Write-Host "Không thể tải script từ $ScriptUrl" -ForegroundColor Red
-        throw
-    }
+    $scriptContent = (Invoke-WebRequest -Uri $ScriptUrl -UseBasicParsing).Content
     $scriptB64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($scriptContent))
-    $cmdArgs = @("-c", "import base64, sys; exec(base64.b64decode(sys.argv[1]).decode())", $scriptB64) + $Arguments
+    
+    # script_b64 là sys.argv[2] (vì -c "..." base64 --graalvm-url ...)
+    # sys.argv[3:] sẽ là các đối số thực (--graalvm-url ...)
+    $pyCode = @"
+import sys, base64
+script_b64 = sys.argv[2]
+sys.argv = ['script.py'] + sys.argv[3:]
+exec(base64.b64decode(script_b64).decode())
+"@
+    $cmdArgs = @("-c", $pyCode, $scriptB64) + $Arguments
     $result = & python $cmdArgs 2>&1
     if ($LASTEXITCODE -ne 0) {
         throw "Python script exited with code $LASTEXITCODE. Output: $result"
