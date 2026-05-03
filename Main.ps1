@@ -7,7 +7,6 @@
 #>
 
 #Requires -RunAsAdministrator
-# Giữ script tiếp tục chạy dù có lỗi, tự xử lý bên dưới
 $ErrorActionPreference = "Continue"
 
 # ======= CẤU HÌNH =======
@@ -27,7 +26,6 @@ $pythonExe            = "$pythonPortableFolder\python.exe"
 # =========================
 
 function Test-Python {
-    # 1. Kiểm tra Python portable đã có sẵn
     if (Test-Path $pythonExe) {
         $result = & $pythonExe -c "print('OK')" 2>&1
         if ($LASTEXITCODE -eq 0) {
@@ -35,26 +33,19 @@ function Test-Python {
             return $true
         }
     }
-
-    # 2. Kiểm tra python trong PATH
     try {
         $null = Get-Command python -ErrorAction Stop
         $result = & python -c "print('OK')" 2>&1
-        if ($LASTEXITCODE -eq 0) {
-            return $true
-        }
+        if ($LASTEXITCODE -eq 0) { return $true }
     } catch {}
-    
     return $false
 }
 
 function Download-PythonPortable {
-    Write-Host "Không tìm thấy Python hoặc alias giả. Đang tải Python portable từ Google Drive..." -ForegroundColor Yellow
-    Write-Host "Dung lượng khoảng 40-50MB, vui lòng chờ..." -ForegroundColor Yellow
+    Write-Host "Không tìm thấy Python. Đang tải Python portable từ Google Drive..." -ForegroundColor Yellow
     $tempZip = "$env:TEMP\python_portable.zip"
     try {
-        $webClient = New-Object System.Net.WebClient
-        $webClient.DownloadFile($pythonPortableZipUrl, $tempZip)
+        (New-Object System.Net.WebClient).DownloadFile($pythonPortableZipUrl, $tempZip)
         Write-Host "Đã tải xong. Đang giải nén..." -ForegroundColor Yellow
         Expand-Archive -Path $tempZip -DestinationPath $pythonPortableFolder -Force
         Remove-Item $tempZip
@@ -62,7 +53,7 @@ function Download-PythonPortable {
         Write-Host "Python portable đã sẵn sàng." -ForegroundColor Green
     } catch {
         Write-Host "Lỗi khi tải Python portable: $_" -ForegroundColor Red
-        PauseIfNeeded
+        pause
         exit 1
     }
 }
@@ -75,46 +66,37 @@ function Invoke-PythonScriptInRam {
     $scriptContent = (Invoke-WebRequest -Uri $ScriptUrl -UseBasicParsing).Content
     $scriptB64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($scriptContent))
     
-    # script_b64 là sys.argv[2] (vì -c "..." base64 --graalvm-url ...)
-    # sys.argv[3:] sẽ là các đối số thực (--graalvm-url ...)
+    # Dùng biến môi trường để truyền base64, tránh lỗi command-line
+    $env:PY_SCRIPT_B64 = $scriptB64
     $pyCode = @"
-import sys, base64
-script_b64 = sys.argv[2]
-sys.argv = ['script.py'] + sys.argv[3:]
+import os, sys, base64
+script_b64 = os.environ['PY_SCRIPT_B64']
+sys.argv = ['script.py'] + sys.argv[1:]   # bỏ qua -c và code, chỉ còn đối số thực
 exec(base64.b64decode(script_b64).decode())
 "@
-    $cmdArgs = @("-c", $pyCode, $scriptB64) + $Arguments
+    $cmdArgs = @("-c", $pyCode) + $Arguments
     $result = & python $cmdArgs 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        throw "Python script exited with code $LASTEXITCODE. Output: $result"
+    $exitCode = $LASTEXITCODE
+    Remove-Item env:PY_SCRIPT_B64 -ErrorAction SilentlyContinue
+    if ($exitCode -ne 0) {
+        throw "Python script exited with code $exitCode. Output: $result"
     }
     return $result
 }
 
-function PauseIfNeeded {
-    if ($host.Name -eq "ConsoleHost") {
-        Write-Host "Nhấn Enter để thoát..." -ForegroundColor Yellow
-        Read-Host
-    }
-}
+# === Khởi tạo ===
+if (-not (Test-Python)) { Download-PythonPortable }
+else { Write-Host "Đã tìm thấy Python." -ForegroundColor Cyan }
 
-# Khởi tạo Python
-if (-not (Test-Python)) {
-    Download-PythonPortable
-} else {
-    Write-Host "Đã tìm thấy Python." -ForegroundColor Cyan
-}
-
-# Kiểm tra và cài thư viện nếu cần
+# Kiểm tra và cài thư viện
 $checkLibs = @"
 import importlib, sys
-# Danh sách các module cần import (tên chính xác)
 libs = [
     'requests',
     'psutil',
     'gdown',
     'pydrive2',
-    'yaml',          # pyyaml import là yaml
+    'yaml',
     'cryptography',
     'cryptography.fernet',
     'cryptography.hazmat.primitives.hashes',
@@ -124,8 +106,8 @@ missing = []
 for lib in libs:
     try:
         importlib.import_module(lib)
-    except Exception as e:
-        missing.append(lib + ' (' + str(e) + ')')
+    except:
+        missing.append(lib)
 if missing:
     print('MISSING:' + ','.join(missing))
     sys.exit(1)
@@ -135,11 +117,10 @@ $checkResult = & python -c $checkLibs 2>&1
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Cài đặt thư viện cần thiết..." -ForegroundColor Cyan
     & python -m pip install --quiet --trusted-host pypi.org --trusted-host files.pythonhosted.org requests psutil gdown pydrive2 pyyaml cryptography 2>&1
-    # Kiểm tra lại
     $checkResult = & python -c $checkLibs 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Host "Không thể cài đặt thư viện. Hãy kiểm tra kết nối mạng." -ForegroundColor Red
-        PauseIfNeeded
+        pause
         exit 1
     }
 }
@@ -206,4 +187,7 @@ do {
     }
 } while ($choice -ne '3')
 
-PauseIfNeeded
+if ($host.Name -eq "ConsoleHost") {
+    Write-Host "Nhấn Enter để thoát..." -ForegroundColor Yellow
+    Read-Host
+}
