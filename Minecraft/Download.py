@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 Download.py (Repo: Lynstria/AutomationMinecraftInternetBar)
-Tải TLauncher, GraalVM và versions từ Google Drive về thư mục Downloads của người dùng.
+Tải GraalVM và versions từ Google Drive về thư mục Downloads của người dùng.
+Nếu biến môi trường TLAUNCHER_READY được đặt, bỏ qua tải TLauncher.
 """
 
 import os
@@ -15,11 +16,6 @@ import gdown
 DOWNLOAD_DIR = os.path.join(os.environ['USERPROFILE'], 'Downloads')
 TLAUNCHER_URL = "https://dl1.tlauncher.org/f.php?f=files%2FTLauncher-Installer-1.9.5.1.exe"
 
-# Headers giả lập trình duyệt để tránh 403
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
-}
-
 def download_file(url, dest_folder):
     os.makedirs(dest_folder, exist_ok=True)
     print(f"[Download] Đang tải: {url}")
@@ -29,8 +25,9 @@ def download_file(url, dest_folder):
         import requests
         local_filename = url.split('/')[-1].split('?')[0]
         file_path = os.path.join(dest_folder, local_filename)
-        # Thêm headers vào request
-        with requests.get(url, stream=True, allow_redirects=True, headers=HEADERS) as r:
+        # Thêm headers để giả lập trình duyệt
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        with requests.get(url, stream=True, allow_redirects=True, headers=headers) as r:
             r.raise_for_status()
             with open(file_path, 'wb') as f:
                 for chunk in r.iter_content(chunk_size=8192):
@@ -49,13 +46,18 @@ def main():
     args = parser.parse_args()
 
     print("=== Tải file ===")
-    download_file(TLAUNCHER_URL, DOWNLOAD_DIR)
+    # Nếu PowerShell đã tải TLauncher, bỏ qua
+    if os.environ.get('TLAUNCHER_READY') != '1':
+        download_file(TLAUNCHER_URL, DOWNLOAD_DIR)
+    else:
+        print("[Download] TLauncher đã được tải trước, bỏ qua.")
+
     download_file(args.graalvm_url, DOWNLOAD_DIR)
     download_file(args.versions_url, DOWNLOAD_DIR)
     time.sleep(2)
 
     if not has_required_files():
-        print("[ERROR] Chưa đủ 3 file.")
+        print("[ERROR] Chưa đủ 3 file (1 exe + 2 zip).")
         sys.exit(1)
 
     print("[+] Tải xong, gọi Work.py...")
