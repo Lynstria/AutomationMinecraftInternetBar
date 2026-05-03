@@ -1,0 +1,2 @@
+# AutomationMinecraftInternetBar
+AutomationMinecraftInternetBar
