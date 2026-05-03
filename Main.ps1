@@ -1,7 +1,7 @@
 <#
 .SYNOPSIS
     Pipeline TLauncher & Minecraft: Download/Upload phiên bản.
-    Tự động tải Python portable nếu máy chưa cài Python.
+    Tự động tải Python portable nếu máy chưa cài Python thực sự.
 .NOTES
     Repo: Lynstria/AutomationMinecraftInternetBar
 #>
@@ -10,40 +10,47 @@
 $ErrorActionPreference = "Stop"
 
 # ======= CẤU HÌNH =======
-# Raw URL các file .py
 $downloadPyUrl        = "https://raw.githubusercontent.com/Lynstria/AutomationMinecraftInternetBar/main/Minecraft/Download.py"
 $workPyUrl            = "https://raw.githubusercontent.com/Lynstria/AutomationMinecraftInternetBar/main/Minecraft/Work.py"
 $defendsPyUrl         = "https://raw.githubusercontent.com/Lynstria/AutomationMinecraftInternetBar/main/.vscode/Defends.py"
 $uploadPyUrl          = "https://raw.githubusercontent.com/Lynstria/AutomationMinecraftInternetBar/main/.vscode/Upload.py"
 $decryptSecretsPyUrl  = "https://raw.githubusercontent.com/Lynstria/AutomationMinecraftInternetBar/main/.vscode/decrypt_secrets.py"
 
-# Link Google Drive cố định (cho nhánh 1)
 $graalvmZipDriveLink  = "https://drive.google.com/file/d/1xrxfMiLBWOS2ptPOnUClHrNXOuozid_a/view?usp=sharing"
 $versionsZipDriveLink = "https://drive.google.com/file/d/1_JH04cXYbWSbhTmn3Y9jQFAf57DayWNM/view?usp=sharing"
 
-# Python portable (file zip bạn đã upload)
-$pythonPortableFileId  = "1YyD9-wLDuFIu5Z0O38PHF9I6iIDAt5oO"
-$pythonPortableZipUrl  = "https://drive.google.com/uc?export=download&id=$pythonPortableFileId"
-$pythonPortableFolder  = "$PSScriptRoot\python_portable"
-$pythonExe             = "$pythonPortableFolder\python.exe"
+$pythonPortableFileId = "1YyD9-wLDuFIu5Z0O38PHF9I6iIDAt5oO"
+$pythonPortableZipUrl = "https://drive.google.com/uc?export=download&id=$pythonPortableFileId"
+$pythonPortableFolder = "$PSScriptRoot\python_portable"
+$pythonExe            = "$pythonPortableFolder\python.exe"
 # =========================
 
 function Test-Python {
-    # Ưu tiên Python hệ thống
+    # 1. Kiểm tra Python portable đã có sẵn
+    if (Test-Path $pythonExe) {
+        # Thực thi thử để xác minh chạy được
+        $result = & $pythonExe -c "print('OK')" 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            $env:Path = "$pythonPortableFolder;$env:Path"
+            return $true
+        }
+    }
+
+    # 2. Kiểm tra python trong PATH (hệ thống)
     try {
         $null = Get-Command python -ErrorAction Stop
-        return $true
+        # Thực thi thử để đảm bảo không phải alias giả
+        $result = & python -c "print('OK')" 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            return $true
+        }
     } catch {}
-    # Kiểm tra Python portable đã giải nén sẵn
-    if (Test-Path $pythonExe) {
-        $env:Path = "$pythonPortableFolder;$env:Path"
-        return $true
-    }
+    
     return $false
 }
 
 function Download-PythonPortable {
-    Write-Host "Không tìm thấy Python. Đang tải Python portable từ Google Drive..." -ForegroundColor Yellow
+    Write-Host "Không tìm thấy Python hoặc alias giả. Đang tải Python portable từ Google Drive..." -ForegroundColor Yellow
     Write-Host "Dung lượng khoảng 40-50MB, vui lòng chờ..." -ForegroundColor Yellow
     $tempZip = "$env:TEMP\python_portable.zip"
     try {
