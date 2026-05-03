@@ -9,17 +9,17 @@
 #Requires -RunAsAdministrator
 $ErrorActionPreference = "Continue"
 
-# Thiết lập console và Python dùng UTF-8
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
 $env:PYTHONIOENCODING = "utf-8"
 
 # ======= CẤU HÌNH =======
-$downloadPyUrl        = "https://raw.githubusercontent.com/Lynstria/AutomationMinecraftInternetBar/main/Minecraft/Download.py"
-$workPyUrl            = "https://raw.githubusercontent.com/Lynstria/AutomationMinecraftInternetBar/main/Minecraft/Work.py"
-$defendsPyUrl         = "https://raw.githubusercontent.com/Lynstria/AutomationMinecraftInternetBar/main/.vscode/Defends.py"
-$uploadPyUrl          = "https://raw.githubusercontent.com/Lynstria/AutomationMinecraftInternetBar/main/.vscode/Upload.py"
-$decryptSecretsPyUrl  = "https://raw.githubusercontent.com/Lynstria/AutomationMinecraftInternetBar/main/.vscode/decrypt_secrets.py"
+$cacheBust = "?t=" + (Get-Date -Format "yyyyMMddHHmmss")
+$downloadPyUrl        = "https://raw.githubusercontent.com/Lynstria/AutomationMinecraftInternetBar/main/Minecraft/Download.py" + $cacheBust
+$workPyUrl            = "https://raw.githubusercontent.com/Lynstria/AutomationMinecraftInternetBar/main/Minecraft/Work.py" + $cacheBust
+$defendsPyUrl         = "https://raw.githubusercontent.com/Lynstria/AutomationMinecraftInternetBar/main/.vscode/Defends.py" + $cacheBust
+$uploadPyUrl          = "https://raw.githubusercontent.com/Lynstria/AutomationMinecraftInternetBar/main/.vscode/Upload.py" + $cacheBust
+$decryptSecretsPyUrl  = "https://raw.githubusercontent.com/Lynstria/AutomationMinecraftInternetBar/main/.vscode/decrypt_secrets.py" + $cacheBust
 
 $graalvmZipDriveLink  = "https://drive.google.com/file/d/1xrxfMiLBWOS2ptPOnUClHrNXOuozid_a/view?usp=sharing"
 $versionsZipDriveLink = "https://drive.google.com/file/d/1_JH04cXYbWSbhTmn3Y9jQFAf57DayWNM/view?usp=sharing"
@@ -71,12 +71,11 @@ function Invoke-PythonScriptInRam {
     $scriptContent = (Invoke-WebRequest -Uri $ScriptUrl -UseBasicParsing).Content
     $scriptB64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($scriptContent))
     
-    # Dùng biến môi trường để truyền base64, tránh lỗi command-line
     $env:PY_SCRIPT_B64 = $scriptB64
     $pyCode = @"
 import os, sys, base64
 script_b64 = os.environ['PY_SCRIPT_B64']
-sys.argv = ['script.py'] + sys.argv[1:]   # bỏ qua -c và code, chỉ còn đối số thực
+sys.argv = ['script.py'] + sys.argv[1:]
 exec(base64.b64decode(script_b64).decode())
 "@
     $cmdArgs = @("-c", $pyCode) + $Arguments
@@ -147,16 +146,13 @@ do {
                 $tlauncherExe = "$downloadsDir\TLauncher-Installer-1.9.5.1.exe"
 
                 Write-Host "[*] Đang tải TLauncher..." -ForegroundColor Cyan
-                # Thêm User-Agent để tránh 403
                 $webClient = New-Object System.Net.WebClient
                 $webClient.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
                 $webClient.DownloadFile($tlauncherUrl, $tlauncherExe)
                 Write-Host "[+] Đã tải TLauncher vào $tlauncherExe" -ForegroundColor Green
 
-                # Báo cho Download.py biết TLauncher đã có sẵn
                 $env:TLAUNCHER_READY = "1"
 
-                # Tải Work.py và truyền qua biến môi trường
                 $workScriptContent = (Invoke-WebRequest -Uri $workPyUrl -UseBasicParsing).Content
                 $env:WORK_PY_B64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($workScriptContent))
 
