@@ -8,6 +8,7 @@
 
 #Requires -RunAsAdministrator
 $ErrorActionPreference = "Continue"
+$env:PYTHONIOENCODING = "utf-8"
 
 # ======= CẤU HÌNH =======
 $downloadPyUrl        = "https://raw.githubusercontent.com/Lynstria/AutomationMinecraftInternetBar/main/Minecraft/Download.py"
