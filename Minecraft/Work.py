@@ -1,12 +1,19 @@
 #!/usr/bin/env python3
 """
-Work.py
+Work.py (Repo: Lynstria/AutomationMinecraftInternetBar)
 - Quét thư mục download, chạy TLauncher installer.
 - Theo dõi tiến trình Java + TLauncher.
 - Giải nén, di chuyển version và Java.
 """
 
-import os, sys, glob, time, shutil, zipfile, subprocess, psutil
+import os
+import sys
+import glob
+import time
+import shutil
+import zipfile
+import subprocess
+import psutil
 
 DOWNLOAD_DIR = r"C:\download"
 TLAUNCHER_DIR = os.path.join(os.environ['APPDATA'], '.tlauncher', 'legacy', 'Minecraft', 'game')
@@ -15,17 +22,12 @@ JAVA_DEST_ROOT = r"C:\Java"
 GRAALVM_FOLDER_NAME = "graalvm-jdk-17.0.12+8.1"
 
 def find_exe_folder():
-    """Tìm file .exe (TLauncher) trong thư mục download."""
     exes = glob.glob(os.path.join(DOWNLOAD_DIR, "*.exe"))
     if not exes:
         raise FileNotFoundError("Không tìm thấy file .exe TLauncher.")
     return exes[0]
 
 def find_zip(pattern_hint):
-    """
-    Tìm file zip trong DOWNLOAD_DIR dựa trên một phần tên (pattern_hint).
-    Trả về đường dẫn đầy đủ.
-    """
     zips = glob.glob(os.path.join(DOWNLOAD_DIR, "*.zip"))
     for z in zips:
         base = os.path.basename(z).lower()
@@ -34,7 +36,6 @@ def find_zip(pattern_hint):
     raise FileNotFoundError(f"Không tìm thấy file zip chứa '{pattern_hint}'.")
 
 def wait_for_tlauncher_process():
-    """Chờ cho đến khi phát hiện tiến trình Java và cửa sổ TLauncher."""
     print("Đang chờ TLauncher và Java khởi động...")
     while True:
         found = False
@@ -56,7 +57,6 @@ def wait_for_tlauncher_process():
         time.sleep(3)
 
 def extract_zip(zip_path, extract_to):
-    """Giải nén file zip vào extract_to, giữ cấu trúc folder."""
     print(f"Giải nén {zip_path} -> {extract_to}")
     with zipfile.ZipFile(zip_path, 'r') as zf:
         zf.extractall(extract_to)

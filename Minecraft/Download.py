@@ -1,10 +1,16 @@
 #!/usr/bin/env python3
 """
-Download.py - Tải TLauncher, GraalVM và versions từ Drive về C:\download.
-Sử dụng gdown cho link Drive.
+Download.py (Repo: Lynstria/AutomationMinecraftInternetBar)
+Tải TLauncher, GraalVM và versions từ Google Drive về C:\download.
 """
 
-import os, sys, time, glob, argparse, subprocess, base64
+import os
+import sys
+import time
+import glob
+import argparse
+import subprocess
+import base64
 import gdown
 
 DOWNLOAD_DIR = r"C:\download"
@@ -14,7 +20,6 @@ def download_file(url, dest_folder):
     os.makedirs(dest_folder, exist_ok=True)
     print(f"[Download] Đang tải: {url}")
     if "drive.google.com" in url:
-        # gdown tự động lấy tên file từ Drive
         gdown.download(url, output=dest_folder, quiet=False, fuzzy=True)
     else:
         import requests
