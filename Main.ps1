@@ -8,6 +8,11 @@
 
 #Requires -RunAsAdministrator
 $ErrorActionPreference = "Continue"
+# Buộc PowerShell console dùng UTF-8
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
+
+# Đảm bảo Python xuất ra UTF-8
 $env:PYTHONIOENCODING = "utf-8"
 
 # ======= CẤU HÌNH =======
