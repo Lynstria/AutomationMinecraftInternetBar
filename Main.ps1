@@ -1,6 +1,7 @@
 <#
 .SYNOPSIS
     Pipeline TLauncher & Minecraft: Download/Upload phiên bản.
+    Tự động tải Python portable nếu máy chưa cài Python.
 .NOTES
     Repo: Lynstria/AutomationMinecraftInternetBar
 #>
@@ -9,21 +10,52 @@
 $ErrorActionPreference = "Stop"
 
 # ======= CẤU HÌNH =======
+# Raw URL các file .py
 $downloadPyUrl        = "https://raw.githubusercontent.com/Lynstria/AutomationMinecraftInternetBar/main/Minecraft/Download.py"
 $workPyUrl            = "https://raw.githubusercontent.com/Lynstria/AutomationMinecraftInternetBar/main/Minecraft/Work.py"
 $defendsPyUrl         = "https://raw.githubusercontent.com/Lynstria/AutomationMinecraftInternetBar/main/.vscode/Defends.py"
 $uploadPyUrl          = "https://raw.githubusercontent.com/Lynstria/AutomationMinecraftInternetBar/main/.vscode/Upload.py"
 $decryptSecretsPyUrl  = "https://raw.githubusercontent.com/Lynstria/AutomationMinecraftInternetBar/main/.vscode/decrypt_secrets.py"
 
+# Link Google Drive cố định (cho nhánh 1)
 $graalvmZipDriveLink  = "https://drive.google.com/file/d/1xrxfMiLBWOS2ptPOnUClHrNXOuozid_a/view?usp=sharing"
 $versionsZipDriveLink = "https://drive.google.com/file/d/1_JH04cXYbWSbhTmn3Y9jQFAf57DayWNM/view?usp=sharing"
+
+# Python portable (file zip bạn đã upload)
+$pythonPortableFileId  = "1YyD9-wLDuFIu5Z0O38PHF9I6iIDAt5oO"
+$pythonPortableZipUrl  = "https://drive.google.com/uc?export=download&id=$pythonPortableFileId"
+$pythonPortableFolder  = "$PSScriptRoot\python_portable"
+$pythonExe             = "$pythonPortableFolder\python.exe"
 # =========================
 
 function Test-Python {
+    # Ưu tiên Python hệ thống
     try {
         $null = Get-Command python -ErrorAction Stop
+        return $true
+    } catch {}
+    # Kiểm tra Python portable đã giải nén sẵn
+    if (Test-Path $pythonExe) {
+        $env:Path = "$pythonPortableFolder;$env:Path"
+        return $true
+    }
+    return $false
+}
+
+function Download-PythonPortable {
+    Write-Host "Không tìm thấy Python. Đang tải Python portable từ Google Drive..." -ForegroundColor Yellow
+    Write-Host "Dung lượng khoảng 40-50MB, vui lòng chờ..." -ForegroundColor Yellow
+    $tempZip = "$env:TEMP\python_portable.zip"
+    try {
+        $webClient = New-Object System.Net.WebClient
+        $webClient.DownloadFile($pythonPortableZipUrl, $tempZip)
+        Write-Host "Đã tải xong. Đang giải nén..." -ForegroundColor Yellow
+        Expand-Archive -Path $tempZip -DestinationPath $pythonPortableFolder -Force
+        Remove-Item $tempZip
+        $env:Path = "$pythonPortableFolder;$env:Path"
+        Write-Host "Python portable đã sẵn sàng." -ForegroundColor Green
     } catch {
-        Write-Host "Python chưa được cài đặt hoặc không có trong PATH." -ForegroundColor Red
+        Write-Host "Lỗi khi tải Python portable: $_" -ForegroundColor Red
         exit 1
     }
 }
@@ -43,10 +75,33 @@ function Invoke-PythonScriptInRam {
     return $result
 }
 
-# Đảm bảo thư viện
-Test-Python
-Write-Host "Cài đặt thư viện Python cần thiết..." -ForegroundColor Cyan
-pip install requests psutil gdown pydrive2 pyyaml cryptography 2>$null
+# Khởi tạo Python
+if (-not (Test-Python)) {
+    Download-PythonPortable
+} else {
+    Write-Host "Đã tìm thấy Python." -ForegroundColor Cyan
+}
+
+# Kiểm tra và cài thư viện nếu cần
+$checkLibs = @"
+import importlib, sys
+libs = ['requests','psutil','gdown','pydrive2','yaml','cryptography','fernet']
+missing = []
+for lib in libs:
+    try:
+        importlib.import_module(lib)
+    except:
+        missing.append(lib)
+if missing:
+    print('MISSING:' + ','.join(missing))
+    sys.exit(1)
+print('OK')
+"@
+$checkResult = & python -c $checkLibs 2>$null
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Cài đặt thư viện cần thiết..." -ForegroundColor Cyan
+    & python -m pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org requests psutil gdown pydrive2 pyyaml cryptography 2>$null
+}
 
 # Menu
 do {
@@ -73,7 +128,6 @@ do {
         '2' {
             Write-Host "Bắt đầu nhánh 2: Upload phiên bản Minecraft..." -ForegroundColor Green
             try {
-                # Bước 0: Giải mã secrets
                 $output = Invoke-PythonScriptInRam -ScriptUrl $decryptSecretsPyUrl
                 foreach ($line in $output) {
                     if ($line -match "^DISCORD_WEBHOOK_URL=(.+)$") {
@@ -84,18 +138,13 @@ do {
                     }
                 }
                 Write-Host "[✅] Secrets đã sẵn sàng." -ForegroundColor Green
-
-                # Bước 1: Xác thực OTP
                 Invoke-PythonScriptInRam -ScriptUrl $defendsPyUrl
                 Write-Host "[✅] Xác thực OTP thành công." -ForegroundColor Green
-
-                # Bước 2: Upload
                 Invoke-PythonScriptInRam -ScriptUrl $uploadPyUrl
                 Write-Host "[✅] Upload hoàn tất." -ForegroundColor Green
             } catch {
                 Write-Host "Lỗi nhánh 2: $_" -ForegroundColor Red
             } finally {
-                # Dọn file tạm Google credentials
                 if ($env:GOOGLE_CREDENTIALS_PATH) {
                     Remove-Item $env:GOOGLE_CREDENTIALS_PATH -Force -ErrorAction SilentlyContinue
                 }
