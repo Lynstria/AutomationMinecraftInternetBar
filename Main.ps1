@@ -107,7 +107,20 @@ print('OK')
 $checkResult = & python -c $checkLibs 2>$null
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Cài đặt thư viện cần thiết..." -ForegroundColor Cyan
-    & python -m pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org requests psutil gdown pydrive2 pyyaml cryptography 2>$null
+    # Tạm thời bỏ qua lỗi để tránh script dừng do warning của pip
+    $oldErrorAction = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        & python -m pip install --quiet --trusted-host pypi.org --trusted-host files.pythonhosted.org requests psutil gdown pydrive2 pyyaml cryptography 2>$null
+    } catch {}
+    $ErrorActionPreference = $oldErrorAction
+
+    # Kiểm tra lại sau khi cài
+    $checkResult = & python -c $checkLibs 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Không thể cài đặt thư viện. Hãy kiểm tra kết nối mạng hoặc cài đặt thủ công." -ForegroundColor Red
+        exit 1
+    }
 }
 
 # Menu
