@@ -91,7 +91,15 @@ def upload_to_gdrive():
     file_drive = drive.CreateFile({'title': FILE_NAME, 'parents': [{'id': folder_id}]})
     file_drive.SetContentFile(TEMP_ZIP)
     file_drive.Upload()
-    print(f"[+] Đã upload {FILE_NAME} (ID: {file_drive['id']})")
+
+    # Cấp quyền công khai (anyone with link can view)
+    file_drive.InsertPermission({
+        'type': 'anyone',
+        'role': 'reader',
+        'withLink': True
+    })
+    file_id = file_drive['id']
+    print(f"[+] Đã upload {FILE_NAME} (ID: {file_id}) và cấp quyền công khai")
 
     webhook_url = os.environ.get('DISCORD_WEBHOOK_URL')
     if webhook_url:

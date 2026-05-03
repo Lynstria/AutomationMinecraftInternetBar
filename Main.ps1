@@ -34,7 +34,7 @@ $pythonExe            = "$pythonPortableFolder\python.exe"
 
 function Test-Python {
     if (Test-Path $pythonExe) {
-        $result = & $pythonExe -c "print('OK')" 2>&1
+        $null = & $pythonExe -c "print('OK')" 2>&1
         if ($LASTEXITCODE -eq 0) {
             $env:Path = "$pythonPortableFolder;$env:Path"
             return $true
@@ -42,13 +42,13 @@ function Test-Python {
     }
     try {
         $null = Get-Command python -ErrorAction Stop
-        $result = & python -c "print('OK')" 2>&1
+        $null = & python -c "print('OK')" 2>&1
         if ($LASTEXITCODE -eq 0) { return $true }
     } catch {}
     return $false
 }
 
-function Download-PythonPortable {
+function Get-PythonPortable {
     Write-Host "Không tìm thấy Python. Đang tải Python portable từ Google Drive..." -ForegroundColor Yellow
     $tempZip = "$env:TEMP\python_portable.zip"
     try {
@@ -68,11 +68,12 @@ function Download-PythonPortable {
 function Invoke-PythonScriptInRam {
     param(
         [string]$ScriptUrl,
-        [string[]]$Arguments
+        [string[]]$Arguments,
+        [switch]$Interactive
     )
     $scriptContent = (Invoke-WebRequest -Uri $ScriptUrl -UseBasicParsing).Content
     $scriptB64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($scriptContent))
-    
+
     $env:PY_SCRIPT_B64 = $scriptB64
     $pyCode = @"
 import os, sys, base64
@@ -81,17 +82,29 @@ sys.argv = ['script.py'] + sys.argv[1:]
 exec(base64.b64decode(script_b64).decode())
 "@
     $cmdArgs = @("-c", $pyCode) + $Arguments
-    $result = & python $cmdArgs 2>&1
-    $exitCode = $LASTEXITCODE
+
+    if ($Interactive) {
+        # Chạy tương tác - không capture output
+        & python $cmdArgs 2>&1
+        $exitCode = $LASTEXITCODE
+    } else {
+        $result = & python $cmdArgs 2>&1
+        $exitCode = $LASTEXITCODE
+        Remove-Item env:PY_SCRIPT_B64 -ErrorAction SilentlyContinue
+        if ($exitCode -ne 0) {
+            throw "Python script exited with code $exitCode. Output: $result"
+        }
+        return $result
+    }
+
     Remove-Item env:PY_SCRIPT_B64 -ErrorAction SilentlyContinue
     if ($exitCode -ne 0) {
-        throw "Python script exited with code $exitCode. Output: $result"
+        throw "Python script exited with code $exitCode."
     }
-    return $result
 }
 
 # === Khởi tạo ===
-if (-not (Test-Python)) { Download-PythonPortable }
+if (-not (Test-Python)) { Get-PythonPortable }
 else { Write-Host "Đã tìm thấy Python." -ForegroundColor Cyan }
 
 # Kiểm tra và cài thư viện
@@ -103,10 +116,7 @@ libs = [
     'gdown',
     'pydrive2',
     'yaml',
-    'cryptography',
-    'cryptography.fernet',
-    'cryptography.hazmat.primitives.hashes',
-    'cryptography.hazmat.primitives.kdf.pbkdf2'
+    'cryptography'
 ]
 missing = []
 for lib in libs:
@@ -119,11 +129,11 @@ if missing:
     sys.exit(1)
 print('OK')
 "@
-$checkResult = & python -c $checkLibs 2>&1
+$null = & python -c $checkLibs 2>&1
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Cài đặt thư viện cần thiết..." -ForegroundColor Cyan
     & python -m pip install --quiet --trusted-host pypi.org --trusted-host files.pythonhosted.org requests psutil gdown pydrive2 pyyaml cryptography 2>&1
-    $checkResult = & python -c $checkLibs 2>&1
+    $null = & python -c $checkLibs 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Host "Không thể cài đặt thư viện. Hãy kiểm tra kết nối mạng." -ForegroundColor Red
         pause
@@ -132,30 +142,32 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 # Hàm tải file từ Google Drive (xử lý confirm nếu file lớn)
-function Download-DriveFile {
+function Get-DriveFile {
     param(
         [string]$FileId,
         [string]$Destination
     )
-    $confirmUrl = "https://drive.google.com/uc?export=download&id=$FileId"
-    $webClient = New-Object System.Net.WebClient
-    $webClient.Headers.Add("User-Agent", "Mozilla/5.0")
+    $url = "https://drive.google.com/uc?export=download&id=$FileId"
     try {
-        # Thử tải trực tiếp
-        $webClient.DownloadFile($confirmUrl, $Destination)
-        Write-Host "[+] Đã tải: $Destination"
-    } catch {
-        # Nếu gặp trang confirm, parse cookie và tải lại
-        $response = Invoke-WebRequest -Uri $confirmUrl -Method Get -UseBasicParsing
-        $confirmCookie = $response.Content -match 'confirm=([^"]+)'
-        if ($Matches) {
+        # Sử dụng Invoke-WebRequest với session để xử lý cookie
+        $session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+        $session.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+        # Lần 1: Lấy trang xác nhận (nếu có)
+        $response = Invoke-WebRequest -Uri $url -Method Get -WebSession $session -UseBasicParsing
+
+        # Kiểm tra nếu có trang xác nhận (file lớn)
+        if ($response.Content -match 'confirm=([^&"]+)') {
             $confirmCode = $Matches[1]
             $downloadUrl = "https://drive.google.com/uc?export=download&confirm=$confirmCode&id=$FileId"
-            $webClient.DownloadFile($downloadUrl, $Destination)
-            Write-Host "[+] Đã tải: $Destination"
-        } else {
-            throw "Không thể tải file từ Google Drive."
+            $response = Invoke-WebRequest -Uri $downloadUrl -Method Get -WebSession $session -UseBasicParsing
         }
+
+        # Lưu nội dung vào file
+        [System.IO.File]::WriteAllBytes($Destination, $response.Content)
+        Write-Host "[+] Đã tải: $Destination"
+    } catch {
+        throw "Không thể tải file từ Google Drive: $_"
     }
 }
 
@@ -185,11 +197,11 @@ do {
 
                 # 2. Tải GraalVM zip
                 Write-Host "[2/3] Đang tải GraalVM..." -ForegroundColor Cyan
-                Download-DriveFile -FileId $graalvmFileId -Destination $graalvmZip
+                Get-DriveFile -FileId $graalvmFileId -Destination $graalvmZip
 
                 # 3. Tải versions.zip
                 Write-Host "[3/3] Đang tải Versions..." -ForegroundColor Cyan
-                Download-DriveFile -FileId $versionsFileId -Destination $versionsZip
+                Get-DriveFile -FileId $versionsFileId -Destination $versionsZip
 
                 Write-Host "[✅] Đã tải đủ 3 file. Bắt đầu cài đặt..." -ForegroundColor Green
 
@@ -213,7 +225,7 @@ do {
                     }
                 }
                 Write-Host "[✅] Secrets đã sẵn sàng." -ForegroundColor Green
-                Invoke-PythonScriptInRam -ScriptUrl $defendsPyUrl
+                Invoke-PythonScriptInRam -ScriptUrl $defendsPyUrl -Interactive
                 Write-Host "[✅] Xác thực OTP thành công." -ForegroundColor Green
                 Invoke-PythonScriptInRam -ScriptUrl $uploadPyUrl
                 Write-Host "[✅] Upload hoàn tất." -ForegroundColor Green
