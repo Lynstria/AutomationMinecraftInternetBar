@@ -20,12 +20,11 @@ def download_file(url, dest_folder):
     os.makedirs(dest_folder, exist_ok=True)
     print(f"[Download] Đang tải: {url}")
     if "drive.google.com" in url:
-        gdown.download(url, output=dest_folder, quiet=False, fuzzy=True)
+        gdown.download(url, output=dest_folder, quiet=False)   # <-- bỏ fuzzy=True
     else:
         import requests
         local_filename = url.split('/')[-1].split('?')[0]
         file_path = os.path.join(dest_folder, local_filename)
-        # Thêm headers để giả lập trình duyệt
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
         with requests.get(url, stream=True, allow_redirects=True, headers=headers) as r:
             r.raise_for_status()
