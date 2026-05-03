@@ -7,7 +7,8 @@
 #>
 
 #Requires -RunAsAdministrator
-$ErrorActionPreference = "Stop"
+# Giữ script tiếp tục chạy dù có lỗi, tự xử lý bên dưới
+$ErrorActionPreference = "Continue"
 
 # ======= CẤU HÌNH =======
 $downloadPyUrl        = "https://raw.githubusercontent.com/Lynstria/AutomationMinecraftInternetBar/main/Minecraft/Download.py"
@@ -28,19 +29,17 @@ $pythonExe            = "$pythonPortableFolder\python.exe"
 function Test-Python {
     # 1. Kiểm tra Python portable đã có sẵn
     if (Test-Path $pythonExe) {
-        # Thực thi thử để xác minh chạy được
-        $result = & $pythonExe -c "print('OK')" 2>$null
+        $result = & $pythonExe -c "print('OK')" 2>&1
         if ($LASTEXITCODE -eq 0) {
             $env:Path = "$pythonPortableFolder;$env:Path"
             return $true
         }
     }
 
-    # 2. Kiểm tra python trong PATH (hệ thống)
+    # 2. Kiểm tra python trong PATH
     try {
         $null = Get-Command python -ErrorAction Stop
-        # Thực thi thử để đảm bảo không phải alias giả
-        $result = & python -c "print('OK')" 2>$null
+        $result = & python -c "print('OK')" 2>&1
         if ($LASTEXITCODE -eq 0) {
             return $true
         }
@@ -63,6 +62,7 @@ function Download-PythonPortable {
         Write-Host "Python portable đã sẵn sàng." -ForegroundColor Green
     } catch {
         Write-Host "Lỗi khi tải Python portable: $_" -ForegroundColor Red
+        PauseIfNeeded
         exit 1
     }
 }
@@ -72,7 +72,12 @@ function Invoke-PythonScriptInRam {
         [string]$ScriptUrl,
         [string[]]$Arguments
     )
-    $scriptContent = (Invoke-WebRequest -Uri $ScriptUrl -UseBasicParsing).Content
+    try {
+        $scriptContent = (Invoke-WebRequest -Uri $ScriptUrl -UseBasicParsing).Content
+    } catch {
+        Write-Host "Không thể tải script từ $ScriptUrl" -ForegroundColor Red
+        throw
+    }
     $scriptB64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($scriptContent))
     $cmdArgs = @("-c", "import base64, sys; exec(base64.b64decode(sys.argv[1]).decode())", $scriptB64) + $Arguments
     $result = & python $cmdArgs 2>&1
@@ -80,6 +85,13 @@ function Invoke-PythonScriptInRam {
         throw "Python script exited with code $LASTEXITCODE. Output: $result"
     }
     return $result
+}
+
+function PauseIfNeeded {
+    if ($host.Name -eq "ConsoleHost") {
+        Write-Host "Nhấn Enter để thoát..." -ForegroundColor Yellow
+        Read-Host
+    }
 }
 
 # Khởi tạo Python
@@ -104,21 +116,15 @@ if missing:
     sys.exit(1)
 print('OK')
 "@
-$checkResult = & python -c $checkLibs 2>$null
+$checkResult = & python -c $checkLibs 2>&1
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Cài đặt thư viện cần thiết..." -ForegroundColor Cyan
-    # Tạm thời bỏ qua lỗi để tránh script dừng do warning của pip
-    $oldErrorAction = $ErrorActionPreference
-    $ErrorActionPreference = "Continue"
-    try {
-        & python -m pip install --quiet --trusted-host pypi.org --trusted-host files.pythonhosted.org requests psutil gdown pydrive2 pyyaml cryptography 2>$null
-    } catch {}
-    $ErrorActionPreference = $oldErrorAction
-
-    # Kiểm tra lại sau khi cài
-    $checkResult = & python -c $checkLibs 2>$null
+    & python -m pip install --quiet --trusted-host pypi.org --trusted-host files.pythonhosted.org requests psutil gdown pydrive2 pyyaml cryptography 2>&1
+    # Kiểm tra lại
+    $checkResult = & python -c $checkLibs 2>&1
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "Không thể cài đặt thư viện. Hãy kiểm tra kết nối mạng hoặc cài đặt thủ công." -ForegroundColor Red
+        Write-Host "Không thể cài đặt thư viện. Hãy kiểm tra kết nối mạng." -ForegroundColor Red
+        PauseIfNeeded
         exit 1
     }
 }
@@ -134,8 +140,13 @@ do {
     switch ($choice) {
         '1' {
             Write-Host "Bắt đầu nhánh 1: Tải xuống và cài đặt..." -ForegroundColor Green
-            $workScriptContent = (Invoke-WebRequest -Uri $workPyUrl -UseBasicParsing).Content
-            $env:WORK_PY_B64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($workScriptContent))
+            try {
+                $workScriptContent = (Invoke-WebRequest -Uri $workPyUrl -UseBasicParsing).Content
+                $env:WORK_PY_B64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($workScriptContent))
+            } catch {
+                Write-Host "Lỗi tải Work.py" -ForegroundColor Red
+                continue
+            }
             try {
                 Invoke-PythonScriptInRam -ScriptUrl $downloadPyUrl -Arguments @("--graalvm-url", $graalvmZipDriveLink, "--versions-url", $versionsZipDriveLink)
                 Write-Host "Nhánh 1 hoàn tất." -ForegroundColor Green
@@ -179,3 +190,5 @@ do {
         }
     }
 } while ($choice -ne '3')
+
+PauseIfNeeded
