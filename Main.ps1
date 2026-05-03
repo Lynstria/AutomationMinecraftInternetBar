@@ -104,13 +104,24 @@ if (-not (Test-Python)) {
 # Kiểm tra và cài thư viện nếu cần
 $checkLibs = @"
 import importlib, sys
-libs = ['requests','psutil','gdown','pydrive2','yaml','cryptography','fernet']
+# Danh sách các module cần import (tên chính xác)
+libs = [
+    'requests',
+    'psutil',
+    'gdown',
+    'pydrive2',
+    'yaml',          # pyyaml import là yaml
+    'cryptography',
+    'cryptography.fernet',
+    'cryptography.hazmat.primitives.hashes',
+    'cryptography.hazmat.primitives.kdf.pbkdf2'
+]
 missing = []
 for lib in libs:
     try:
         importlib.import_module(lib)
-    except:
-        missing.append(lib)
+    except Exception as e:
+        missing.append(lib + ' (' + str(e) + ')')
 if missing:
     print('MISSING:' + ','.join(missing))
     sys.exit(1)
