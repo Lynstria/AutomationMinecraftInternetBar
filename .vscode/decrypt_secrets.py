@@ -47,11 +47,17 @@ def cleanup_temp_file():
 def main():
     global _temp_file_path, _success
 
-    if not os.path.exists("secrets.enc"):
-        print("[ERROR] Không tìm thấy file secrets.enc.")
+    # Nhận đường dẫn secrets.enc từ command line argument hoặc file hiện tại
+    if len(sys.argv) > 1:
+        secrets_path = sys.argv[1]
+    else:
+        secrets_path = "secrets.enc"
+
+    if not os.path.exists(secrets_path):
+        print(f"[ERROR] Không tìm thấy file {secrets_path}.")
         sys.exit(1)
 
-    with open("secrets.enc", "rb") as f:
+    with open(secrets_path, "rb") as f:
         data = f.read()
 
     # Thử định dạng mới (có salt ngẫu nhiên ở đầu)

@@ -31,7 +31,29 @@ $pythonPortableFolder = "$tempDir\python_portable"
 $pythonExe            = "$pythonPortableFolder\Scripts\python.exe"
 # =========================
 
-function Test-Python {
+function Test-Venv {
+    $venvCandidates = @(
+        if ($PSScriptRoot) {
+            Join-Path $PSScriptRoot '.venv\Scripts\python.exe'
+            Join-Path $PSScriptRoot 'venv\Scripts\python.exe'
+        }
+        '.\.venv\Scripts\python.exe'
+        '.\venv\Scripts\python.exe'
+    )
+    foreach ($p in $venvCandidates) {
+        if (Test-Path $p) {
+            $null = & $p -c "print('OK')" 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                $script:pythonExe = (Resolve-Path $p).Path
+                Write-Host "Tìm thấy venv: $pythonExe" -ForegroundColor Cyan
+                return $true
+            }
+        }
+    }
+    return $false
+}
+
+function Test-PortablePython {
     if (Test-Path $pythonExe) {
         $null = & $pythonExe -c "print('OK')" 2>&1
         if ($LASTEXITCODE -eq 0) {
@@ -39,14 +61,46 @@ function Test-Python {
             return $true
         }
     }
+    return $false
+}
+
+function Create-Venv {
+    param([string]$SystemPython)
+    $venvDir = "$tempDir\venv"
+    if (Test-Path "$venvDir\Scripts\python.exe") {
+        Write-Host "Đã có sẵn venv tại $venvDir" -ForegroundColor Cyan
+        $script:pythonExe = "$venvDir\Scripts\python.exe"
+        return $true
+    }
+    Write-Host "Đang tạo venv từ $SystemPython..." -ForegroundColor Yellow
+    try {
+        & $SystemPython -m venv $venvDir 2>&1 | Out-Null
+        if (Test-Path "$venvDir\Scripts\python.exe") {
+            $script:pythonExe = "$venvDir\Scripts\python.exe"
+            $env:Path = "$venvDir\Scripts;$env:Path"
+            Write-Host "Venv đã sẵn sàng: $pythonExe" -ForegroundColor Green
+            return $true
+        }
+    } catch {}
+    return $false
+}
+
+function Test-Python {
+    # 0. Thử venv có sẵn (nếu chạy từ repo local)
+    if (Test-Venv) { return $true }
+
+    # 1. Thử Python portable
+    if (Test-PortablePython) { return $true }
+
+    # 2. Thử Python hệ thống -> tạo venv
     try {
         $sysPython = (Get-Command python -ErrorAction Stop).Source
         $null = & $sysPython -c "print('OK')" 2>&1
         if ($LASTEXITCODE -eq 0) {
-            $script:pythonExe = $sysPython
-            return $true
+            if (Create-Venv -SystemPython $sysPython) { return $true }
         }
     } catch {}
+
     return $false
 }
 
@@ -111,8 +165,15 @@ function Invoke-PythonScriptInRam {
 if (Test-Path $tempDir) {
     Get-ChildItem "$tempDir\script_*.py" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
 }
-if (-not (Test-Python)) { Get-PythonPortable }
-else { Write-Host "Đã tìm thấy Python." -ForegroundColor Cyan }
+if (-not (Test-Python)) {
+    Get-PythonPortable
+    # Sau khi có portable, kiểm tra lại
+    if (-not (Test-PortablePython)) {
+        Write-Host "Không thể khởi tạo Python." -ForegroundColor Red
+        pause; exit 1
+    }
+}
+Write-Host "Đã sẵn sàng với Python: $pythonExe" -ForegroundColor Cyan
 
 # Kiểm tra và cài thư viện
 $checkLibs = @"
@@ -168,31 +229,65 @@ function Test-DownloadSize {
     Write-Host "[+] $Label dung lượng OK: $sizeMB MB"
 }
 
-# Hàm tải file từ Google Drive (xử lý confirm nếu file lớn)
+# Hàm tải file từ Google Drive (xử lý confirm nếu file lớn/có virus scan warning)
 function Get-DriveFile {
     param(
         [string]$FileId,
         [string]$Destination
     )
-    $url = "https://drive.google.com/uc?export=download&id=$FileId"
+    $baseUrl = "https://drive.google.com/uc?export=download&id=$FileId"
     try {
         $session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
         $session.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 
-        # Lần 1: Kiểm tra trang xác nhận (file lớn)
+        # Lần 1: Lấy trang xác nhận (file lớn hoặc virus scan)
         $confirmCode = $null
         try {
-            $page = Invoke-WebRequest -Uri $url -Method Get -WebSession $session -UseBasicParsing
-            if ($page.Content -match 'confirm=([^&"]+)') {
+            $page = Invoke-WebRequest -Uri $baseUrl -Method Get -WebSession $session -UseBasicParsing
+            if ($page.Content -match 'confirm=([^&"''>]+)') {
                 $confirmCode = $Matches[1]
             }
         } catch {}
 
+        # Lần 2: Tải file (xử lý virus scan warning)
         if ($confirmCode) {
             $downloadUrl = "https://drive.google.com/uc?export=download&confirm=$confirmCode&id=$FileId"
-            Invoke-WebRequest -Uri $downloadUrl -WebSession $session -OutFile $Destination -UseBasicParsing
         } else {
-            Invoke-WebRequest -Uri $url -WebSession $session -OutFile $Destination -UseBasicParsing
+            $downloadUrl = $baseUrl
+        }
+
+        # Thử tải bằng WebClient (xử lý redirect tốt)
+        $downloaded = $false
+        try {
+            $wc = New-Object System.Net.WebClient
+            $wc.Headers.Add("User-Agent", $session.UserAgent)
+            foreach ($cookie in $session.Cookies.GetCookies($baseUrl)) {
+                $wc.Headers.Add("Cookie", "$($cookie.Name)=$($cookie.Value)")
+            }
+            $wc.DownloadFile($downloadUrl, $Destination)
+            $downloaded = $true
+        } catch {}
+
+        # Nếu WebClient thất bại, thử Invoke-WebRequest
+        if (-not $downloaded -or -not (Test-Path $Destination) -or (Get-Item $Destination).Length -eq 0) {
+            try {
+                Invoke-WebRequest -Uri $downloadUrl -WebSession $session -OutFile $Destination -UseBasicParsing -TimeoutSec 300
+            } catch {}
+        }
+
+        # Kiểm tra file có phải là HTML (lỗi) không
+        if (Test-Path $Destination) {
+            $fileSize = (Get-Item $Destination).Length
+            if ($fileSize -lt 1024) {
+                $content = Get-Content $Destination -Raw -ErrorAction SilentlyContinue
+                if ($content -match '<html|b>') {
+                    throw "Google Drive từ chối tải file (có thể do virus scan). Hãy thử tải thủ công từ: https://drive.google.com/file/d/$FileId/view"
+                }
+            }
+        }
+
+        if (-not (Test-Path $Destination) -or (Get-Item $Destination).Length -eq 0) {
+            throw "Không thể tải file (file rỗng hoặc không tồn tại)"
         }
 
         Write-Host "[+] Đã tải: $Destination"
@@ -247,7 +342,23 @@ do {
         '2' {
             Write-Host "Bắt đầu nhánh 2: Upload phiên bản Minecraft..." -ForegroundColor Green
             try {
-                $output = Invoke-PythonScriptInRam -ScriptPath $decryptSecretsPyUrl
+                # Tải secrets.enc về thư mục tạm
+                $secretsEncPath = "$tempDir\secrets.enc"
+                Write-Host "Đang tải secrets.enc..." -ForegroundColor Cyan
+                $secretsUrl = "$REPO_RAW/secrets.enc"
+                try {
+                    $wc = New-Object System.Net.WebClient
+                    $wc.Headers.Add("User-Agent", "Mozilla/5.0")
+                    $wc.DownloadFile($secretsUrl, $secretsEncPath)
+                } catch {
+                    throw "Không thể tải secrets.enc từ repo: $_"
+                }
+                if (-not (Test-Path $secretsEncPath)) {
+                    throw "File secrets.enc không tồn tại sau khi tải."
+                }
+
+                # Chạy decrypt_secrets.py với đường dẫn secrets.enc
+                $output = Invoke-PythonScriptInRam -ScriptPath $decryptSecretsPyUrl -Arguments $secretsEncPath
                 foreach ($line in $output) {
                     if ($line -match "^DISCORD_WEBHOOK_URL=(.+)$") {
                         $env:DISCORD_WEBHOOK_URL = $Matches[1]
@@ -266,6 +377,10 @@ do {
             } finally {
                 if ($env:GOOGLE_CREDENTIALS_PATH) {
                     Remove-Item $env:GOOGLE_CREDENTIALS_PATH -Force -ErrorAction SilentlyContinue
+                }
+                # Xóa secrets.enc tạm
+                if (Test-Path "$tempDir\secrets.enc") {
+                    Remove-Item "$tempDir\secrets.enc" -Force -ErrorAction SilentlyContinue
                 }
             }
         }
