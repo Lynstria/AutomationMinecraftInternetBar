@@ -200,7 +200,7 @@ print('OK')
 $null = & $pythonExe -c $checkLibs 2>&1
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Cài đặt thư viện cần thiết..." -ForegroundColor Cyan
-    & $pythonExe -m pip install --quiet --trusted-host pypi.org --trusted-host files.pythonhosted.org requests psutil gdown pydrive2 pyyaml cryptography 2>&1
+    & $pythonExe -m pip install --no-cache-dir --quiet --trusted-host pypi.org --trusted-host files.pythonhosted.org requests psutil gdown pydrive2 pyyaml cryptography 2>&1
     $null = & $pythonExe -c $checkLibs 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Host "Không thể cài đặt thư viện. Hãy kiểm tra kết nối mạng." -ForegroundColor Red
@@ -229,65 +229,70 @@ function Test-DownloadSize {
     Write-Host "[+] $Label dung lượng OK: $sizeMB MB"
 }
 
-# Hàm tải file từ Google Drive (xử lý confirm nếu file lớn/có virus scan warning)
+# Hàm tải file từ Google Drive (ưu tiên gdown, fallback WebRequest)
 function Get-DriveFile {
     param(
         [string]$FileId,
         [string]$Destination
     )
-    $baseUrl = "https://drive.google.com/uc?export=download&id=$FileId"
     try {
-        $session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
-        $session.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-
-        # Lần 1: Lấy trang xác nhận (file lớn hoặc virus scan)
-        $confirmCode = $null
+        # Bước 1: Thử tải bằng gdown (nếu có)
+        $gdownOk = $false
         try {
-            $page = Invoke-WebRequest -Uri $baseUrl -Method Get -WebSession $session -UseBasicParsing
-            if ($page.Content -match 'confirm=([^&"''>]+)') {
-                $confirmCode = $Matches[1]
-            }
-        } catch {}
-
-        # Lần 2: Tải file (xử lý virus scan warning)
-        if ($confirmCode) {
-            $downloadUrl = "https://drive.google.com/uc?export=download&confirm=$confirmCode&id=$FileId"
-        } else {
-            $downloadUrl = $baseUrl
-        }
-
-        # Thử tải bằng WebClient (xử lý redirect tốt)
-        $downloaded = $false
-        try {
-            $wc = New-Object System.Net.WebClient
-            $wc.Headers.Add("User-Agent", $session.UserAgent)
-            foreach ($cookie in $session.Cookies.GetCookies($baseUrl)) {
-                $wc.Headers.Add("Cookie", "$($cookie.Name)=$($cookie.Value)")
-            }
-            $wc.DownloadFile($downloadUrl, $Destination)
-            $downloaded = $true
-        } catch {}
-
-        # Nếu WebClient thất bại, thử Invoke-WebRequest
-        if (-not $downloaded -or -not (Test-Path $Destination) -or (Get-Item $Destination).Length -eq 0) {
-            try {
-                Invoke-WebRequest -Uri $downloadUrl -WebSession $session -OutFile $Destination -UseBasicParsing -TimeoutSec 300
-            } catch {}
-        }
-
-        # Kiểm tra file có phải là HTML (lỗi) không
-        if (Test-Path $Destination) {
-            $fileSize = (Get-Item $Destination).Length
-            if ($fileSize -lt 1024) {
-                $content = Get-Content $Destination -Raw -ErrorAction SilentlyContinue
-                if ($content -match '<html|b>') {
-                    throw "Google Drive từ chối tải file (có thể do virus scan). Hãy thử tải thủ công từ: https://drive.google.com/file/d/$FileId/view"
+            $null = & $pythonExe -c "import gdown; print('OK')" 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "[*] Dùng gdown để tải file..." -ForegroundColor Cyan
+                # gdown: cú pháp đúng: gdown <url> -O <output>
+                $url = "https://drive.google.com/uc?id=$FileId"
+                Write-Host "[DEBUG] gdown url: $url" -ForegroundColor Gray
+                Write-Host "[DEBUG] gdown output: $Destination" -ForegroundColor Gray
+                & $pythonExe -m gdown $url -O "$Destination" 2>&1
+                Write-Host "[DEBUG] gdown exit code: $LASTEXITCODE" -ForegroundColor Gray
+                if ($LASTEXITCODE -eq 0 -and (Test-Path $Destination)) {
+                    $sz = (Get-Item $Destination).Length
+                    Write-Host "[DEBUG] gdown file size: $sz bytes" -ForegroundColor Gray
+                    if ($sz -gt 0) {
+                        Write-Host "[+] Đã tải (gdown): $Destination"
+                        $gdownOk = $true
+                    } else {
+                        Write-Host "[!] gdown tải file rỗng, thử cách khác..." -ForegroundColor Yellow
+                    }
+                } else {
+                    Write-Host "[!] gdown thất bại (exit code $LASTEXITCODE), thử cách khác..." -ForegroundColor Yellow
                 }
             }
+        } catch {}
+
+        if (-not $gdownOk) {
+            # Bước 2: Fallback - WebRequest
+            Write-Host "[*] Dùng WebRequest để tải file..." -ForegroundColor Cyan
+            $session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+            $session.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+            $downloadUrl = "https://drive.google.com/uc?export=download&id=$FileId"
+            try {
+                $resp = Invoke-WebRequest -Uri $downloadUrl -Method Get -WebSession $session -UseBasicParsing -TimeoutSec 30
+                if ($resp.Content -match 'confirm=([^&"''>]+)') {
+                    $confirmCode = $Matches[1]
+                    $downloadUrl = "https://drive.google.com/uc?export=download&confirm=$confirmCode&id=$FileId"
+                }
+            } catch {}
+
+            Invoke-WebRequest -Uri $downloadUrl -WebSession $session -OutFile $Destination -UseBasicParsing -TimeoutSec 600
         }
 
-        if (-not (Test-Path $Destination) -or (Get-Item $Destination).Length -eq 0) {
-            throw "Không thể tải file (file rỗng hoặc không tồn tại)"
+        # Bước 3: Kiểm tra kết quả chung
+        if (-not (Test-Path $Destination)) {
+            throw "File không tồn tại sau khi tải"
+        }
+        $fileSize = (Get-Item $Destination).Length
+        if ($fileSize -eq 0) {
+            # Kiểm tra nếu file là HTML
+            $content = Get-Content $Destination -Raw -ErrorAction SilentlyContinue
+            if ($content -match 'virus|scan|<html') {
+                throw "Google Drive từ chối tải (virus scan). Link thủ công: https://drive.google.com/file/d/$FileId/view"
+            }
+            throw "File tải về bị rỗng (0 byte)"
         }
 
         Write-Host "[+] Đã tải: $Destination"
