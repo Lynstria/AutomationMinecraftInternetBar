@@ -228,12 +228,12 @@ do {
                 # 2. Tải GraalVM zip
                 Write-Host "[2/3] Đang tải GraalVM..." -ForegroundColor Cyan
                 Get-DriveFile -FileId $graalvmFileId -Destination $graalvmZip
-                Test-DownloadSize -FilePath $graalvmZip -MinBytes 104857600 -Label "GraalVM"
+                Test-DownloadSize -FilePath $graalvmZip -MinBytes 10485761 -Label "GraalVM"
 
                 # 3. Tải versions.zip
                 Write-Host "[3/3] Đang tải Versions..." -ForegroundColor Cyan
                 Get-DriveFile -FileId $versionsFileId -Destination $versionsZip
-                Test-DownloadSize -FilePath $versionsZip -MinBytes 1048576 -Label "Versions.zip"
+                Test-DownloadSize -FilePath $versionsZip -MinBytes 10485761 -Label "Versions.zip"
 
                 Write-Host "[✅] Đã tải đủ 3 file. Bắt đầu cài đặt..." -ForegroundColor Green
 
