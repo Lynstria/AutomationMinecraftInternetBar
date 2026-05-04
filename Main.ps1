@@ -107,6 +107,10 @@ function Invoke-PythonScriptInRam {
 }
 
 # === Khởi tạo ===
+# Dọn file .py tạm từ lần chạy trước (nếu có)
+if (Test-Path $tempDir) {
+    Get-ChildItem "$tempDir\script_*.py" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+}
 if (-not (Test-Python)) { Get-PythonPortable }
 else { Write-Host "Đã tìm thấy Python." -ForegroundColor Cyan }
 
