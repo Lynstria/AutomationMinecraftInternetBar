@@ -14,12 +14,12 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 $env:PYTHONIOENCODING = "utf-8"
 
 # ======= CẤU HÌNH =======
-$repoRoot              = $PSScriptRoot
-$tempDir               = "$repoRoot\.temp"
-$workPyPath            = "$repoRoot\Minecraft\Work.py"
-$defendsPyPath         = "$repoRoot\.vscode\Defends.py"
-$uploadPyPath          = "$repoRoot\.vscode\Upload.py"
-$decryptSecretsPyPath  = "$repoRoot\.vscode\decrypt_secrets.py"
+$REPO_RAW              = "https://raw.githubusercontent.com/Lynstria/AutomationMinecraftInternetBar/main"
+$tempDir               = "$env:TEMP\Automation_Bootstrap"
+$workPyUrl             = "$REPO_RAW/Minecraft/Work.py"
+$defendsPyUrl          = "$REPO_RAW/.vscode/Defends.py"
+$uploadPyUrl           = "$REPO_RAW/.vscode/Upload.py"
+$decryptSecretsPyUrl  = "$REPO_RAW/.vscode/decrypt_secrets.py"
 
 # Link Google Drive – dùng ID để tạo direct link
 $graalvmFileId  = "1xrxfMiLBWOS2ptPOnUClHrNXOuozid_a"
@@ -27,7 +27,7 @@ $versionsFileId = "1_JH04cXYbWSbhTmn3Y9jQFAf57DayWNM"
 $tlauncherUrl   = "https://dl1.tlauncher.org/f.php?f=files%2FTLauncher-Installer-1.9.5.1.exe"
 
 $pythonPortableFileId = "1YyD9-wLDuFIu5Z0O38PHF9I6iIDAt5oO"
-$pythonPortableFolder = "$PSScriptRoot\.venv"
+$pythonPortableFolder = "$tempDir\python_portable"
 $pythonExe            = "$pythonPortableFolder\Scripts\python.exe"
 # =========================
 
@@ -209,7 +209,7 @@ do {
                 Write-Host "[✅] Đã tải đủ 3 file. Bắt đầu cài đặt..." -ForegroundColor Green
 
                 # Gọi Work.py
-                Invoke-PythonScriptInRam -ScriptPath $workPyPath
+                Invoke-PythonScriptInRam -ScriptPath $workPyUrl
                 Write-Host "Nhánh 1 hoàn tất." -ForegroundColor Green
             } catch {
                 Write-Host "Lỗi nhánh 1: $_" -ForegroundColor Red
@@ -218,7 +218,7 @@ do {
         '2' {
             Write-Host "Bắt đầu nhánh 2: Upload phiên bản Minecraft..." -ForegroundColor Green
             try {
-                $output = Invoke-PythonScriptInRam -ScriptPath $decryptSecretsPyPath
+                $output = Invoke-PythonScriptInRam -ScriptPath $decryptSecretsPyUrl
                 foreach ($line in $output) {
                     if ($line -match "^DISCORD_WEBHOOK_URL=(.+)$") {
                         $env:DISCORD_WEBHOOK_URL = $Matches[1]
@@ -228,9 +228,9 @@ do {
                     }
                 }
                 Write-Host "[✅] Secrets đã sẵn sàng." -ForegroundColor Green
-                Invoke-PythonScriptInRam -ScriptPath $defendsPyPath -Interactive
+                Invoke-PythonScriptInRam -ScriptPath $defendsPyUrl -Interactive
                 Write-Host "[✅] Xác thực OTP thành công." -ForegroundColor Green
-                Invoke-PythonScriptInRam -ScriptPath $uploadPyPath
+                Invoke-PythonScriptInRam -ScriptPath $uploadPyUrl
                 Write-Host "[✅] Upload hoàn tất." -ForegroundColor Green
             } catch {
                 Write-Host "Lỗi nhánh 2: $_" -ForegroundColor Red
