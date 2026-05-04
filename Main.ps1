@@ -40,9 +40,12 @@ function Test-Python {
         }
     }
     try {
-        $null = Get-Command python -ErrorAction Stop
-        $null = & python -c "print('OK')" 2>&1
-        if ($LASTEXITCODE -eq 0) { return $true }
+        $sysPython = (Get-Command python -ErrorAction Stop).Source
+        $null = & $sysPython -c "print('OK')" 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            $script:pythonExe = $sysPython
+            return $true
+        }
     } catch {}
     return $false
 }
@@ -141,6 +144,26 @@ if ($LASTEXITCODE -ne 0) {
     }
 }
 
+# Kiểm tra dung lượng file tải về (phải đạt mức tối thiểu)
+function Test-DownloadSize {
+    param(
+        [string]$FilePath,
+        [long]$MinBytes,
+        [string]$Label
+    )
+    if (-not (Test-Path $FilePath)) {
+        throw "$Label không tồn tại sau khi tải: $FilePath"
+    }
+    $size = (Get-Item $FilePath).Length
+    if ($size -lt $MinBytes) {
+        $sizeMB = [math]::Round($size / 1MB, 2)
+        $minMB = [math]::Round($MinBytes / 1MB, 2)
+        throw "$Label quá nhỏ ($sizeMB MB), có thể tải sai. Yêu cầu tối thiểu: $minMB MB"
+    }
+    $sizeMB = [math]::Round($size / 1MB, 2)
+    Write-Host "[+] $Label dung lượng OK: $sizeMB MB"
+}
+
 # Hàm tải file từ Google Drive (xử lý confirm nếu file lớn)
 function Get-DriveFile {
     param(
@@ -196,15 +219,17 @@ do {
                 $wc = New-Object System.Net.WebClient
                 $wc.Headers.Add("User-Agent", "Mozilla/5.0")
                 $wc.DownloadFile($tlauncherUrl, $tlauncherExe)
-                Write-Host "[+] TLauncher đã tải xong." -ForegroundColor Green
+                Test-DownloadSize -FilePath $tlauncherExe -MinBytes 3145728 -Label "TLauncher"
 
                 # 2. Tải GraalVM zip
                 Write-Host "[2/3] Đang tải GraalVM..." -ForegroundColor Cyan
                 Get-DriveFile -FileId $graalvmFileId -Destination $graalvmZip
+                Test-DownloadSize -FilePath $graalvmZip -MinBytes 104857600 -Label "GraalVM"
 
                 # 3. Tải versions.zip
                 Write-Host "[3/3] Đang tải Versions..." -ForegroundColor Cyan
                 Get-DriveFile -FileId $versionsFileId -Destination $versionsZip
+                Test-DownloadSize -FilePath $versionsZip -MinBytes 1048576 -Label "Versions.zip"
 
                 Write-Host "[✅] Đã tải đủ 3 file. Bắt đầu cài đặt..." -ForegroundColor Green
 
