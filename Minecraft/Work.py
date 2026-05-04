@@ -24,10 +24,12 @@ JAVA_DEST_ROOT = r'C:\Java'
 def find_exe_folder():
     tlauncher_candidates = glob.glob(os.path.join(DOWNLOAD_DIR, 'TLauncher*.exe'))
     if tlauncher_candidates:
+        tlauncher_candidates.sort(key=os.path.getmtime, reverse=True)
         return tlauncher_candidates[0]
     exes = glob.glob(os.path.join(DOWNLOAD_DIR, '*.exe'))
     if not exes:
         raise FileNotFoundError('Khong tim thay file .exe TLauncher.')
+    exes.sort(key=os.path.getmtime, reverse=True)
     return exes[0]
 
 
@@ -35,6 +37,7 @@ def find_zip(pattern_hint):
     zips = glob.glob(os.path.join(DOWNLOAD_DIR, '*.zip'))
     if not zips:
         raise FileNotFoundError('Khong tim thay file .zip nao trong ' + DOWNLOAD_DIR)
+    zips.sort(key=os.path.getmtime, reverse=True)
     for z in zips:
         base = os.path.basename(z).lower()
         if pattern_hint.lower() in base:
@@ -109,24 +112,30 @@ def main_workflow():
     for item in os.listdir(versions_src):
         s = os.path.join(versions_src, item)
         d = os.path.join(VERSIONS_DEST, item)
-        if os.path.isdir(s):
-            if os.path.exists(d):
-                shutil.rmtree(d)
-            shutil.move(s, d)
-        else:
-            shutil.move(s, d)
+        try:
+            if os.path.isdir(s):
+                if os.path.exists(d):
+                    shutil.rmtree(d)
+                shutil.move(s, d)
+            else:
+                shutil.move(s, d)
+        except Exception as e:
+            raise RuntimeError('Loi khi di chuyen ' + s + ' -> ' + d + ': ' + str(e))
     try:
         os.rmdir(versions_src)
-    except Exception:
-        pass
+    except Exception as e:
+        print('[!] Khong the xoa thu muc ' + versions_src + ': ' + str(e))
 
     # Di chuyen GraalVM vao thu muc Java
     java_dest = os.path.join(JAVA_DEST_ROOT, graalvm_dirs[0])
     os.makedirs(JAVA_DEST_ROOT, exist_ok=True)
     print('Di chuyen ' + graalvm_src + ' -> ' + java_dest)
-    if os.path.exists(java_dest):
-        shutil.rmtree(java_dest)
-    shutil.move(graalvm_src, java_dest)
+    try:
+        if os.path.exists(java_dest):
+            shutil.rmtree(java_dest)
+        shutil.move(graalvm_src, java_dest)
+    except Exception as e:
+        raise RuntimeError('Loi khi di chuyen GraalVM: ' + str(e))
 
     print('=== Work.py hoan tat. Java va versions da duoc thiet lap! ===')
 

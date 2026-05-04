@@ -14,12 +14,12 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 $env:PYTHONIOENCODING = "utf-8"
 
 # ======= CẤU HÌNH =======
-# Chỉ dùng Work.py và các script nhánh 2
-$cacheBust = "?t=" + (Get-Date -Format "yyyyMMddHHmmss")
-$workPyUrl            = "https://raw.githubusercontent.com/Lynstria/AutomationMinecraftInternetBar/main/Minecraft/Work.py" + $cacheBust
-$defendsPyUrl         = "https://raw.githubusercontent.com/Lynstria/AutomationMinecraftInternetBar/main/.vscode/Defends.py" + $cacheBust
-$uploadPyUrl          = "https://raw.githubusercontent.com/Lynstria/AutomationMinecraftInternetBar/main/.vscode/Upload.py" + $cacheBust
-$decryptSecretsPyUrl  = "https://raw.githubusercontent.com/Lynstria/AutomationMinecraftInternetBar/main/.vscode/decrypt_secrets.py" + $cacheBust
+$repoRoot              = $PSScriptRoot
+$tempDir               = "$repoRoot\.temp"
+$workPyPath            = "$repoRoot\Minecraft\Work.py"
+$defendsPyPath         = "$repoRoot\.vscode\Defends.py"
+$uploadPyPath          = "$repoRoot\.vscode\Upload.py"
+$decryptSecretsPyPath  = "$repoRoot\.vscode\decrypt_secrets.py"
 
 # Link Google Drive – dùng ID để tạo direct link
 $graalvmFileId  = "1xrxfMiLBWOS2ptPOnUClHrNXOuozid_a"
@@ -27,9 +27,8 @@ $versionsFileId = "1_JH04cXYbWSbhTmn3Y9jQFAf57DayWNM"
 $tlauncherUrl   = "https://dl1.tlauncher.org/f.php?f=files%2FTLauncher-Installer-1.9.5.1.exe"
 
 $pythonPortableFileId = "1YyD9-wLDuFIu5Z0O38PHF9I6iIDAt5oO"
-$pythonPortableZipUrl = "https://drive.google.com/uc?export=download&id=$pythonPortableFileId"
-$pythonPortableFolder = "$PSScriptRoot\python_portable"
-$pythonExe            = "$pythonPortableFolder\python.exe"
+$pythonPortableFolder = "$PSScriptRoot\.venv"
+$pythonExe            = "$pythonPortableFolder\Scripts\python.exe"
 # =========================
 
 function Test-Python {
@@ -50,12 +49,13 @@ function Test-Python {
 
 function Get-PythonPortable {
     Write-Host "Không tìm thấy Python. Đang tải Python portable từ Google Drive..." -ForegroundColor Yellow
-    $tempZip = "$env:TEMP\python_portable.zip"
+    $tempZip = "$tempDir\python_portable.zip"
+    if (-not (Test-Path $tempDir)) { New-Item -ItemType Directory -Path $tempDir -Force | Out-Null }
     try {
-        (New-Object System.Net.WebClient).DownloadFile($pythonPortableZipUrl, $tempZip)
+        Get-DriveFile -FileId $pythonPortableFileId -Destination $tempZip
         Write-Host "Đã tải xong. Đang giải nén..." -ForegroundColor Yellow
         Expand-Archive -Path $tempZip -DestinationPath $pythonPortableFolder -Force
-        Remove-Item $tempZip
+        Remove-Item $tempZip -Force -ErrorAction SilentlyContinue
         $env:Path = "$pythonPortableFolder;$env:Path"
         Write-Host "Python portable đã sẵn sàng." -ForegroundColor Green
     } catch {
@@ -67,37 +67,37 @@ function Get-PythonPortable {
 
 function Invoke-PythonScriptInRam {
     param(
-        [string]$ScriptUrl,
+        [string]$ScriptPath,
         [string[]]$Arguments,
         [switch]$Interactive
     )
-    $scriptContent = (Invoke-WebRequest -Uri $ScriptUrl -UseBasicParsing).Content
-    $scriptB64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($scriptContent))
-
-    $env:PY_SCRIPT_B64 = $scriptB64
-    $pyCode = @"
-import os, sys, base64
-script_b64 = os.environ['PY_SCRIPT_B64']
-sys.argv = ['script.py'] + sys.argv[1:]
-exec(base64.b64decode(script_b64).decode())
-"@
-    $cmdArgs = @("-c", $pyCode) + $Arguments
-
-    if ($Interactive) {
-        # Chạy tương tác - không capture output
-        & python $cmdArgs 2>&1
-        $exitCode = $LASTEXITCODE
+    if (-not (Test-Path $tempDir)) { New-Item -ItemType Directory -Path $tempDir -Force | Out-Null }
+    if (Test-Path $ScriptPath) {
+        $scriptContent = Get-Content $ScriptPath -Raw
     } else {
-        $result = & python $cmdArgs 2>&1
-        $exitCode = $LASTEXITCODE
-        Remove-Item env:PY_SCRIPT_B64 -ErrorAction SilentlyContinue
-        if ($exitCode -ne 0) {
-            throw "Python script exited with code $exitCode. Output: $result"
+        $scriptContent = (Invoke-WebRequest -Uri $ScriptPath -UseBasicParsing).Content
+    }
+    $tmpScript = "$tempDir\script_$(Get-Random).py"
+    [System.IO.File]::WriteAllText($tmpScript, $scriptContent, [System.Text.Encoding]::UTF8)
+
+    try {
+        $cmdArgs = @($tmpScript) + $Arguments
+
+        if ($Interactive) {
+            & python $cmdArgs 2>&1
+            $exitCode = $LASTEXITCODE
+        } else {
+            $result = & python $cmdArgs 2>&1
+            $exitCode = $LASTEXITCODE
+            if ($exitCode -ne 0) {
+                throw "Python script exited with code $exitCode. Output: $result"
+            }
+            return $result
         }
-        return $result
+    } finally {
+        Remove-Item $tmpScript -Force -ErrorAction SilentlyContinue
     }
 
-    Remove-Item env:PY_SCRIPT_B64 -ErrorAction SilentlyContinue
     if ($exitCode -ne 0) {
         throw "Python script exited with code $exitCode."
     }
@@ -149,22 +149,25 @@ function Get-DriveFile {
     )
     $url = "https://drive.google.com/uc?export=download&id=$FileId"
     try {
-        # Sử dụng Invoke-WebRequest với session để xử lý cookie
         $session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
         $session.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 
-        # Lần 1: Lấy trang xác nhận (nếu có)
-        $response = Invoke-WebRequest -Uri $url -Method Get -WebSession $session -UseBasicParsing
+        # Lần 1: Kiểm tra trang xác nhận (file lớn)
+        $confirmCode = $null
+        try {
+            $page = Invoke-WebRequest -Uri $url -Method Get -WebSession $session -UseBasicParsing
+            if ($page.Content -match 'confirm=([^&"]+)') {
+                $confirmCode = $Matches[1]
+            }
+        } catch {}
 
-        # Kiểm tra nếu có trang xác nhận (file lớn)
-        if ($response.Content -match 'confirm=([^&"]+)') {
-            $confirmCode = $Matches[1]
+        if ($confirmCode) {
             $downloadUrl = "https://drive.google.com/uc?export=download&confirm=$confirmCode&id=$FileId"
-            $response = Invoke-WebRequest -Uri $downloadUrl -Method Get -WebSession $session -UseBasicParsing
+            Invoke-WebRequest -Uri $downloadUrl -WebSession $session -OutFile $Destination -UseBasicParsing
+        } else {
+            Invoke-WebRequest -Uri $url -WebSession $session -OutFile $Destination -UseBasicParsing
         }
 
-        # Lưu nội dung vào file
-        [System.IO.File]::WriteAllBytes($Destination, $response.Content)
         Write-Host "[+] Đã tải: $Destination"
     } catch {
         throw "Không thể tải file từ Google Drive: $_"
@@ -206,7 +209,7 @@ do {
                 Write-Host "[✅] Đã tải đủ 3 file. Bắt đầu cài đặt..." -ForegroundColor Green
 
                 # Gọi Work.py
-                Invoke-PythonScriptInRam -ScriptUrl $workPyUrl
+                Invoke-PythonScriptInRam -ScriptPath $workPyPath
                 Write-Host "Nhánh 1 hoàn tất." -ForegroundColor Green
             } catch {
                 Write-Host "Lỗi nhánh 1: $_" -ForegroundColor Red
@@ -215,7 +218,7 @@ do {
         '2' {
             Write-Host "Bắt đầu nhánh 2: Upload phiên bản Minecraft..." -ForegroundColor Green
             try {
-                $output = Invoke-PythonScriptInRam -ScriptUrl $decryptSecretsPyUrl
+                $output = Invoke-PythonScriptInRam -ScriptPath $decryptSecretsPyPath
                 foreach ($line in $output) {
                     if ($line -match "^DISCORD_WEBHOOK_URL=(.+)$") {
                         $env:DISCORD_WEBHOOK_URL = $Matches[1]
@@ -225,9 +228,9 @@ do {
                     }
                 }
                 Write-Host "[✅] Secrets đã sẵn sàng." -ForegroundColor Green
-                Invoke-PythonScriptInRam -ScriptUrl $defendsPyUrl -Interactive
+                Invoke-PythonScriptInRam -ScriptPath $defendsPyPath -Interactive
                 Write-Host "[✅] Xác thực OTP thành công." -ForegroundColor Green
-                Invoke-PythonScriptInRam -ScriptUrl $uploadPyUrl
+                Invoke-PythonScriptInRam -ScriptPath $uploadPyPath
                 Write-Host "[✅] Upload hoàn tất." -ForegroundColor Green
             } catch {
                 Write-Host "Lỗi nhánh 2: $_" -ForegroundColor Red
@@ -246,6 +249,12 @@ do {
         }
     }
 } while ($choice -ne '3')
+
+# Dọn dẹp thư mục tạm
+if (Test-Path $tempDir) {
+    Remove-Item $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+    Write-Host "[+] Đã dọn dẹp thư mục tạm." -ForegroundColor Gray
+}
 
 if ($host.Name -eq "ConsoleHost") {
     Write-Host "Nhấn Enter để thoát..." -ForegroundColor Yellow
