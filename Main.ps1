@@ -64,7 +64,7 @@ function Test-PortablePython {
     return $false
 }
 
-function Create-Venv {
+function New-Venv {
     param([string]$SystemPython)
     $venvDir = "$tempDir\venv"
     if (Test-Path "$venvDir\Scripts\python.exe") {
@@ -97,7 +97,7 @@ function Test-Python {
         $sysPython = (Get-Command python -ErrorAction Stop).Source
         $null = & $sysPython -c "print('OK')" 2>&1
         if ($LASTEXITCODE -eq 0) {
-            if (Create-Venv -SystemPython $sysPython) { return $true }
+            if (New-Venv -SystemPython $sysPython) { return $true }
         }
     } catch {}
 
