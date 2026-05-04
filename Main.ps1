@@ -41,7 +41,7 @@ function Test-Python {
     }
     try {
         $null = Get-Command python -ErrorAction Stop
-        $null = & python -c "print('OK')" 2>&1
+        $null = & python -c "print $pythonExe -c "print('OK')" 2>&1
         if ($LASTEXITCODE -eq 0) { return $true }
     } catch {}
     return $false
@@ -84,10 +84,10 @@ function Invoke-PythonScriptInRam {
         $cmdArgs = @($tmpScript) + $Arguments
 
         if ($Interactive) {
-            & python $cmdArgs 2>&1
+            & python $cmdArgs $pythonExe $cmdArgs 2>&1
             $exitCode = $LASTEXITCODE
         } else {
-            $result = & python $cmdArgs 2>&1
+            $result = & python $cmdArgs $pythonExe $cmdArgs 2>&1
             $exitCode = $LASTEXITCODE
             if ($exitCode -ne 0) {
                 throw "Python script exited with code $exitCode. Output: $result"
@@ -129,11 +129,11 @@ if missing:
     sys.exit(1)
 print('OK')
 "@
-$null = & python -c $checkLibs 2>&1
+$null = & python -c $checkLibs $pythonExe -c $checkLibs 2>&1
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Cài đặt thư viện cần thiết..." -ForegroundColor Cyan
-    & python -m pip install --quiet --trusted-host pypi.org --trusted-host files.pythonhosted.org requests psutil gdown pydrive2 pyyaml cryptography 2>&1
-    $null = & python -c $checkLibs 2>&1
+    & python -m pip install $pythonExe -m pip install --quiet --trusted-host pypi.org --trusted-host files.pythonhosted.org requests psutil gdown pydrive2 pyyaml cryptography 2>&1
+    $null = & python -c $checkLibs $pythonExe -c $checkLibs 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Host "Không thể cài đặt thư viện. Hãy kiểm tra kết nối mạng." -ForegroundColor Red
         pause
