@@ -23,6 +23,19 @@ $decryptSecretsPyUrl  = "$REPO_RAW/.vscode/decrypt_secrets.py"
 
 # Hàm đọc config.yaml (trả về hashtable)
 function Get-Config {
+    # Nếu chạy qua irm | iex, $PSScriptRoot sẽ rỗng → dùng default values
+    if (-not $PSScriptRoot) {
+        Write-Host "Không có file vật lý (chạy qua irm | iex), dùng default config." -ForegroundColor Yellow
+        return @{
+            graalvmFileId       = "1xrxfMiLBWOS2ptPOnUClHrNXOuozid_a"
+            versionsFileId      = "1_JH04cXYbWSbhTmn3Y9jQFAf57DayWNM"
+            tlauncherUrl        = "https://dl1.tlauncher.org/f.php?f=files%2FTLauncher-Installer-1.9.5.1.exe"
+            pythonPortableFileId = "1YyD9-wLDuFIu5Z0O38PHF9I6iIDAt5oO"
+            javaDestRoot        = "C:\Java"
+            otpTimeoutSeconds   = 15
+        }
+    }
+
     $configFile = Join-Path $PSScriptRoot 'config.yaml'
     if (-not (Test-Path $configFile)) {
         # Trả về default values nếu không có config.yaml

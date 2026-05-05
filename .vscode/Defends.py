@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 defends.py
 - Sinh OTP tu day so 1-10: chon 4 so ngau nhien, dao tron roi gui qua Discord webhook moi 15 giay.
@@ -10,7 +10,16 @@ import sys
 import time
 import secrets
 import requests
-from config import load_config
+# Try import, fallback to inlined code for irm | iex
+try:
+    from config import load_config
+except ModuleNotFoundError:
+    def load_config():
+        import os
+        import yaml
+        config_path = os.path.join(os.path.dirname(__file__), '..', 'config.yaml')  # Go up to repo root
+        with open(config_path, 'r', encoding='utf-8') as f:
+            return yaml.safe_load(f)
 
 # Fix encoding for Windows
 if hasattr(sys.stdout, 'reconfigure'):
@@ -88,3 +97,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

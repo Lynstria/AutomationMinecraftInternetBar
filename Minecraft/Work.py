@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 Work.py (Repo: Lynstria/AutomationMinecraftInternetBar)
 - Quet thu muc Downloads, chay TLauncher installer.
@@ -15,8 +15,65 @@ import zipfile
 import subprocess
 import psutil
 import json
-from mc_utils import find_minecraft_dir
-from config import load_config
+# Try import, fallback to inlined code for irm | iex
+try:
+    from mc_utils import find_minecraft_dir
+    from config import load_config
+except ModuleNotFoundError:
+    # Inlined: mc_utils.py
+    def find_minecraft_dir():
+        import os
+        import sys
+        appdata_locations = set()
+        for var in ["APPDATA", "LOCALAPPDATA"]:
+            if var in os.environ:
+                appdata_locations.add(os.environ[var])
+        if "LOCALAPPDATA" in os.environ:
+            appdata_locations.add(os.path.join(os.path.dirname(os.environ["LOCALAPPDATA"]), "LocalLow"))
+        if "USERPROFILE" in os.environ:
+            appdata_locations.add(os.path.join(os.environ["USERPROFILE"], "AppData", "Roaming"))
+            appdata_locations.add(os.path.join(os.environ["USERPROFILE"], "AppData", "Local"))
+            appdata_locations.add(os.path.join(os.environ["USERPROFILE"], "AppData", "LocalLow"))
+        if not appdata_locations:
+            try:
+                import getpass
+                default = os.path.join("C:\\Users", getpass.getuser(), "AppData")
+                appdata_locations.add(os.path.join(default, "Roaming"))
+                appdata_locations.add(os.path.join(default, "Local"))
+            except:
+                pass
+        candidates = []
+        for base in appdata_locations:
+            if not os.path.exists(base):
+                continue
+            for d in os.listdir(base):
+                full = os.path.join(base, d)
+                if d.lower() == ".tlauncher" and os.path.isdir(full):
+                    for root, dirs, files in os.walk(full):
+                        for subd in dirs:
+                            if subd.lower() == "game":
+                                game_dir = os.path.join(root, subd)
+                                if os.path.exists(game_dir):
+                                    candidates.append(game_dir)
+                    mc_game = os.path.join(full, "Minecraft", "game")
+                    if os.path.exists(mc_game):
+                        candidates.append(mc_game)
+                if d.lower() == ".minecraft" and os.path.isdir(full):
+                    candidates.append(full)
+                    break
+        if not candidates:
+            tried = "\n".join(str(p) for p in appdata_locations)
+            raise FileNotFoundError(f"Khong tim thay thu muc Minecraft trong AppData.\nDa thu cac vi tri:\n{tried}")
+        return candidates[0]
+
+    # Inlined: config.py
+    def load_config():
+        import os
+        import yaml
+        # Work.py is in Minecraft/, config.yaml is in parent directory
+        config_path = os.path.join(os.path.dirname(__file__), '..', 'config.yaml')
+        with open(config_path, 'r', encoding='utf-8') as f:
+            return yaml.safe_load(f)
 
 cfg = load_config()
 DOWNLOAD_DIR = os.path.join(os.environ['USERPROFILE'], 'Downloads')
@@ -66,6 +123,9 @@ def extract_zip(zip_path, extract_to):
 
 
 def main_workflow():
+    global TLAUNCHER_DIR, VERSIONS_DEST
+    TLAUNCHER_DIR = find_minecraft_dir()
+    VERSIONS_DEST = os.path.join(TLAUNCHER_DIR, "versions")
     print('=== Work.py bat dau ===')
     tlauncher_exe = find_exe_folder()
     graalvm_zip = find_zip('graalvm')
@@ -152,3 +212,5 @@ def main_workflow():
 
 if __name__ == '__main__':
     main_workflow()
+
+

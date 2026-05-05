@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 upload.py
 - Nén thư mục versions Minecraft.
@@ -13,7 +13,54 @@ import tempfile
 import requests                     # <-- ĐÃ THÊM
 from pydrive2.auth import GoogleAuth
 from pydrive2.drive import GoogleDrive
-from mc_utils import find_minecraft_dir
+# Try import, fallback to inlined code for irm | iex
+try:
+    from mc_utils import find_minecraft_dir
+except ModuleNotFoundError:
+    def find_minecraft_dir():
+        import os
+        import sys
+        appdata_locations = set()
+        for var in ["APPDATA", "LOCALAPPDATA"]:
+            if var in os.environ:
+                appdata_locations.add(os.environ[var])
+        if "LOCALAPPDATA" in os.environ:
+            appdata_locations.add(os.path.join(os.path.dirname(os.environ["LOCALAPPDATA"]), "LocalLow"))
+        if "USERPROFILE" in os.environ:
+            appdata_locations.add(os.path.join(os.environ["USERPROFILE"], "AppData", "Roaming"))
+            appdata_locations.add(os.path.join(os.environ["USERPROFILE"], "AppData", "Local"))
+            appdata_locations.add(os.path.join(os.environ["USERPROFILE"], "AppData", "LocalLow"))
+        if not appdata_locations:
+            try:
+                import getpass
+                default = os.path.join("C:\\Users", getpass.getuser(), "AppData")
+                appdata_locations.add(os.path.join(default, "Roaming"))
+                appdata_locations.add(os.path.join(default, "Local"))
+            except:
+                pass
+        candidates = []
+        for base in appdata_locations:
+            if not os.path.exists(base):
+                continue
+            for d in os.listdir(base):
+                full = os.path.join(base, d)
+                if d.lower() == ".tlauncher" and os.path.isdir(full):
+                    for root, dirs, files in os.walk(full):
+                        for subd in dirs:
+                            if subd.lower() == "game":
+                                game_dir = os.path.join(root, subd)
+                                if os.path.exists(game_dir):
+                                    candidates.append(game_dir)
+                    mc_game = os.path.join(full, "Minecraft", "game")
+                    if os.path.exists(mc_game):
+                        candidates.append(mc_game)
+                if d.lower() == ".minecraft" and os.path.isdir(full):
+                    candidates.append(full)
+                    break
+        if not candidates:
+            tried = "\n".join(str(p) for p in appdata_locations)
+            raise FileNotFoundError(f"Khong tim thay thu muc Minecraft trong AppData.\nDa thu cac vi tri:\n{tried}")
+        return candidates[0]
 
 TEMP_ZIP = os.path.join(tempfile.gettempdir(), 'versions.zip')
 DRIVE_FOLDER_NAME = 'Minecraft_Map'

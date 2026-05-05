@@ -11,10 +11,53 @@ import tempfile
 import json
 import atexit
 
-# Add parent directory to path so crypto_utils can be found
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Try import, fallback to inlined code for irm | iex
+try:
+    # Add parent directory to path so crypto_utils can be found
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from crypto_utils import decrypt_secrets_file
+except (ModuleNotFoundError, ImportError):
+    # Inlined: crypto_utils.py
+    import os
+    import tempfile
+    from cryptography.fernet import Fernet
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+    import base64
 
-from crypto_utils import decrypt_secrets_file
+    SALT_SIZE = 16
+    OLD_SALT = b"automatio_minecraft_salt_fixed"
+
+    def derive_key(password: str, salt: bytes) -> bytes:
+        kdf = PBKDF2HMAC(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=salt,
+            iterations=100_000,
+        )
+        return base64.urlsafe_b64encode(kdf.derive(password.encode()))
+
+    def decrypt_secrets_file(path: str, password: str) -> dict:
+        with open(path, "rb") as f:
+            data = f.read()
+        if len(data) > SALT_SIZE:
+            salt = data[:SALT_SIZE]
+            encrypted_data = data[SALT_SIZE:]
+        else:
+            salt = OLD_SALT
+            encrypted_data = data
+        key = derive_key(password, salt)
+        f = Fernet(key)
+        decrypted = f.decrypt(encrypted_data).decode("utf-8")
+        parts = decrypted.split("\n", 1)
+        if len(parts) != 2:
+            raise ValueError("Invalid data format in decrypted content")
+        discord_webhook = parts[0].strip()
+        google_credentials = parts[1]
+        return {
+            "discord_webhook": discord_webhook,
+            "google_credentials_json": google_credentials,
+        }
 
 # Global variables for tracking temp file
 _temp_file_path = None
