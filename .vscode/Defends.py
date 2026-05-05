@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 defends.py
-- Gửi mã OTP (xáo trộn từ SECRET) qua Discord webhook mỗi 15 giây.
+- Sinh OTP từ dãy số 1-10: chọn 4 số ngẫu nhiên, đảo trộn rồi gửi qua Discord webhook mỗi 15 giây.
 - Người dùng phải nhập đúng mã hiện tại để tiếp tục.
 """
 
@@ -11,19 +11,8 @@ import time
 import secrets
 import requests
 
-# Đọc SECRET từ biến môi trường OTP_SECRET
-# Nếu không có, yêu cầu người dùng nhập (chỉ lần đầu, các lần sau nên set env)
-SECRET = os.environ.get("246810")
-if not SECRET:
-    # Nếu chạy từ Main.ps1, SECRET nên được set từ trước
-    # Ở đây dùng input để tương thích ngược
-    try:
-        SECRET = input("Nhập SECRET cho OTP: ").strip()
-    except:
-        pass
-    if not SECRET:
-        print("[ERROR] Thiếu OTP_SECRET. Hãy set biến môi trường OTP_SECRET trước khi chạy.")
-        sys.exit(1)
+# Dãy số nguồn từ 1 đến 10 dùng để sinh OTP
+DIGIT_POOL = "0123456789"
 
 WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL")
 
@@ -32,10 +21,10 @@ if not WEBHOOK_URL:
     sys.exit(1)
 
 def generate_otp():
-    """Tạo OTP bằng cách xáo trộn SECRET sử dụng cryptographically secure RNG."""
-    digits = list(SECRET)
-    secrets.SystemRandom().shuffle(digits)
-    return ''.join(digits)
+    """Chọn 4 số ngẫu nhiên từ DIGIT_POOL và đảo trộn bằng cryptographically secure RNG."""
+    chosen = secrets.SystemRandom().sample(DIGIT_POOL, 4)
+    secrets.SystemRandom().shuffle(chosen)
+    return ''.join(chosen)
 
 def send_discord_message(content):
     data = {"content": content}

@@ -141,7 +141,8 @@ function Invoke-PythonScriptInRam {
         $cmdArgs = @($tmpScript) + $Arguments
 
         if ($Interactive) {
-            & $pythonExe $cmdArgs 2>&1
+            # Chạy trực tiếp không qua 2>&1 để Python nhận input từ console
+            & $pythonExe $cmdArgs
             $exitCode = $LASTEXITCODE
         } else {
             $result = & $pythonExe $cmdArgs 2>&1
@@ -200,7 +201,7 @@ print('OK')
 $null = & $pythonExe -c $checkLibs 2>&1
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Cài đặt thư viện cần thiết..." -ForegroundColor Cyan
-    & $pythonExe -m pip install --no-cache-dir --quiet --trusted-host pypi.org --trusted-host files.pythonhosted.org requests psutil gdown pydrive2 pyyaml cryptography 2>&1
+    & $pythonExe -m pip install --no-cache-dir --quiet --disable-pip-version-check --trusted-host pypi.org --trusted-host files.pythonhosted.org requests psutil gdown pydrive2 pyyaml cryptography 2>&1
     $null = & $pythonExe -c $checkLibs 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Host "Không thể cài đặt thư viện. Hãy kiểm tra kết nối mạng." -ForegroundColor Red
