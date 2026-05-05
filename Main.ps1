@@ -244,10 +244,7 @@ function Get-DriveFile {
                 Write-Host "[*] Dùng gdown để tải file..." -ForegroundColor Cyan
                 # gdown: cú pháp đúng: gdown <url> -O <output>
                 $url = "https://drive.google.com/uc?id=$FileId"
-                Write-Host "[DEBUG] gdown url: $url" -ForegroundColor Gray
-                Write-Host "[DEBUG] gdown output: $Destination" -ForegroundColor Gray
-                & $pythonExe -m gdown $url -O "$Destination" 2>&1
-                Write-Host "[DEBUG] gdown exit code: $LASTEXITCODE" -ForegroundColor Gray
+                & $pythonExe -m gdown $url -O "$Destination"
                 if ($LASTEXITCODE -eq 0 -and (Test-Path $Destination)) {
                     $sz = (Get-Item $Destination).Length
                     Write-Host "[DEBUG] gdown file size: $sz bytes" -ForegroundColor Gray

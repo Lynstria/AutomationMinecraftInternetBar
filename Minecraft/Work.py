@@ -14,13 +14,78 @@ import shutil
 import zipfile
 import subprocess
 import psutil
+import json
 
 DOWNLOAD_DIR = os.path.join(os.environ['USERPROFILE'], 'Downloads')
-TLAUNCHER_DIR = os.path.join(os.environ['APPDATA'], '.tlauncher', 'legacy', 'Minecraft', 'game')
-VERSIONS_DEST = os.path.join(TLAUNCHER_DIR, 'versions')
 JAVA_DEST_ROOT = r'C:\Java'
 
+def find_minecraft_dir():
+    """Tu dong tim thu muc Minecraft, hoat dong tren moi may (ca quan net)."""
+    appdata_locations = set()
 
+    # Cac bien moi truong chuan
+    for var in ["APPDATA", "LOCALAPPDATA"]:
+        if var in os.environ:
+            appdata_locations.add(os.environ[var])
+
+    # LocalLow (cung parent voi Local)
+    if "LOCALAPPDATA" in os.environ:
+        appdata_locations.add(os.path.join(os.path.dirname(os.environ["LOCALAPPDATA"]), "LocalLow"))
+
+    # Tu dong tim qua USERPROFILE (may quan net)
+    if "USERPROFILE" in os.environ:
+        appdata_locations.add(os.path.join(os.environ["USERPROFILE"], "AppData", "Roaming"))
+        appdata_locations.add(os.path.join(os.environ["USERPROFILE"], "AppData", "Local"))
+        appdata_locations.add(os.path.join(os.environ["USERPROFILE"], "AppData", "LocalLow"))
+
+    # Neu khong co gi het, thu voi duong dan mac dinh
+    if not appdata_locations:
+        try:
+            import getpass
+            default = os.path.join("C:\\Users", getpass.getuser(), "AppData", "Roaming")
+            appdata_locations.add(default)
+        except:
+            pass
+
+    candidates = []
+    for base in appdata_locations:
+        if not os.path.exists(base):
+            continue
+        # Tim .tlauncher (khong phan biet in hoa/thuong)
+        for d in os.listdir(base):
+            full = os.path.join(base, d)
+            if d.lower() == ".tlauncher" and os.path.isdir(full):
+                # Tim legacy/Minecraft/game
+                for root, dirs, files in os.walk(full):
+                    for subd in dirs:
+                        if subd.lower() == "game":
+                            game_dir = os.path.join(root, subd)
+                            if os.path.exists(game_dir):
+                                candidates.append(game_dir)
+                # Tim Minecraft/game (khong co legacy)
+                mc_game = os.path.join(full, "Minecraft", "game")
+                if os.path.exists(mc_game):
+                    candidates.append(mc_game)
+
+        # Tim .minecraft (khong phan biet in hoa/thuong)
+        for d in os.listdir(base):
+            full = os.path.join(base, d)
+            if d.lower() == ".minecraft" and os.path.isdir(full):
+                candidates.append(full)
+                break
+
+    if not candidates:
+        tried = "\n".join(str(p) for p in appdata_locations)
+        raise FileNotFoundError(
+            "Khong tim thay thu muc Minecraft trong AppData.\n"
+            f"Da thu cac vi tri:\n{tried}"
+        )
+
+    print(f"[+] Tim thay Minecraft tai: {candidates[0]}")
+    return candidates[0]
+
+TLAUNCHER_DIR = find_minecraft_dir()
+VERSIONS_DEST = os.path.join(TLAUNCHER_DIR, "versions")
 def find_exe_folder():
     tlauncher_candidates = glob.glob(os.path.join(DOWNLOAD_DIR, 'TLauncher*.exe'))
     if tlauncher_candidates:
@@ -53,22 +118,7 @@ def find_zip(pattern_hint):
 
 
 def wait_for_tlauncher_process():
-    print('Dang cho TLauncher va Java khoi dong...')
-    while True:
-        found = False
-        for proc in psutil.process_iter(['name', 'cmdline']):
-            try:
-                name = (proc.info['name'] or '').lower()
-                if 'java' in name:
-                    found = True
-                    break
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                continue
-        if found:
-            print('Da phat hien TLauncher/Java dang chay.')
-            input('>>> Nhan Enter de tiep tuc sau khi ban da cai dat xong TLauncher...')
-            return
-        time.sleep(3)
+    input('>>> Nhan Enter de tiep tuc sau khi ban da cai dat xong TLauncher...')
 
 
 def extract_zip(zip_path, extract_to):
@@ -94,15 +144,26 @@ def main_workflow():
     extract_zip(versions_zip, DOWNLOAD_DIR)
 
     # Tim thu muc GraalVM dong
-    graalvm_dirs = [
-        d for d in os.listdir(DOWNLOAD_DIR)
-        if os.path.isdir(os.path.join(DOWNLOAD_DIR, d)) and 'graalvm' in d.lower()
-    ]
-    if not graalvm_dirs:
+    graalvm_src = None
+    graalvm_folder_name = None
+    for item in os.listdir(DOWNLOAD_DIR):
+        item_path = os.path.join(DOWNLOAD_DIR, item)
+        if os.path.isdir(item_path) and 'graalvm' in item.lower():
+            graalvm_src = item_path
+            # Xu ly nested: GraalVM.zip/graalvm-jdk-17.0.12+8.1/ -> lay folder con
+            subdirs = [
+                d for d in os.listdir(graalvm_src)
+                if os.path.isdir(os.path.join(graalvm_src, d)) and 'graalvm' in d.lower()
+            ]
+            if subdirs:
+                graalvm_src = os.path.join(graalvm_src, subdirs[0])
+                print('[!] Phat hien nested GraalVM, folder con: ' + os.path.basename(graalvm_src))
+            graalvm_folder_name = os.path.basename(graalvm_src)
+            break
+
+    if not graalvm_src:
         raise FileNotFoundError('Khong tim thay thu muc GraalVM sau giai nen trong ' + DOWNLOAD_DIR)
-    graalvm_src = os.path.join(DOWNLOAD_DIR, graalvm_dirs[0])
-    if len(graalvm_dirs) > 1:
-        print('[!] Co nhieu thu muc GraalVM, dung: ' + graalvm_dirs[0])
+    print('[+] Tim thay GraalVM tai: ' + graalvm_src)
 
     versions_src = os.path.join(DOWNLOAD_DIR, 'versions')
     if not os.path.exists(versions_src):
@@ -126,8 +187,8 @@ def main_workflow():
     except Exception as e:
         print('[!] Khong the xoa thu muc ' + versions_src + ': ' + str(e))
 
-    # Di chuyen GraalVM vao thu muc Java
-    java_dest = os.path.join(JAVA_DEST_ROOT, graalvm_dirs[0])
+    # Di chuyen GraalVM vao thu muc Java (dung ten thu muc con)
+    java_dest = os.path.join(JAVA_DEST_ROOT, graalvm_folder_name if graalvm_folder_name else os.path.basename(graalvm_src))
     os.makedirs(JAVA_DEST_ROOT, exist_ok=True)
     print('Di chuyen ' + graalvm_src + ' -> ' + java_dest)
     try:
@@ -136,6 +197,17 @@ def main_workflow():
         shutil.move(graalvm_src, java_dest)
     except Exception as e:
         raise RuntimeError('Loi khi di chuyen GraalVM: ' + str(e))
+
+    # Tao config TLauncher tu dong nhan GraalVM
+    java_exe = os.path.join(java_dest, 'bin', 'java.exe')
+    config = {"javaPaths": [java_exe]}
+    # Luu tai AppData\Roaming\.tlauncher (vi tri chuan)
+    tlauncher_config_dir = os.path.join(os.environ['APPDATA'], '.tlauncher')
+    os.makedirs(tlauncher_config_dir, exist_ok=True)
+    config_path = os.path.join(tlauncher_config_dir, 'minecraft_tlauncher_java_config.json')
+    with open(config_path, 'w', encoding='utf-8') as f:
+        json.dump(config, f, indent=2)
+    print('[+] Da tao config TLauncher: ' + config_path)
 
     print('=== Work.py hoan tat. Java va versions da duoc thiet lap! ===')
 

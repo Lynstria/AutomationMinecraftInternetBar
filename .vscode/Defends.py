@@ -13,7 +13,7 @@ import requests
 
 # Đọc SECRET từ biến môi trường OTP_SECRET
 # Nếu không có, yêu cầu người dùng nhập (chỉ lần đầu, các lần sau nên set env)
-SECRET = os.environ.get("OTP_SECRET")
+SECRET = os.environ.get("246810")
 if not SECRET:
     # Nếu chạy từ Main.ps1, SECRET nên được set từ trước
     # Ở đây dùng input để tương thích ngược
