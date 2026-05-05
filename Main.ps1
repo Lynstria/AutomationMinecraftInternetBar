@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Pipeline TLauncher & Minecraft: Download/Upload phiên bản.
     Tất cả file được tải bằng PowerShell, không phụ thuộc gdown.
@@ -194,19 +194,44 @@ function Invoke-PythonScriptInRam {
         [switch]$Interactive
     )
     if (-not (Test-Path $tempDir)) { New-Item -ItemType Directory -Path $tempDir -Force | Out-Null }
-    if (Test-Path $ScriptPath) {
-        $scriptContent = Get-Content $ScriptPath -Raw
-    } else {
-        $scriptContent = (Invoke-WebRequest -Uri $ScriptPath -UseBasicParsing).Content
-    }
+
     $tmpScript = "$tempDir\script_$(Get-Random).py"
-    [System.IO.File]::WriteAllText($tmpScript, $scriptContent, [System.Text.Encoding]::UTF8)
+
+    if (Test-Path $ScriptPath) {
+        # Local file: copy as bytes, strip BOM if present
+        $bytes = [System.IO.File]::ReadAllBytes($ScriptPath)
+        # Strip UTF-8 BOM (EF BB BF) if present
+        if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+            $bytes = $bytes[3..($bytes.Length-1)]
+        }
+        [System.IO.File]::WriteAllBytes($tmpScript, $bytes)
+    } else {
+        # Web request: download directly as bytes to file (bypassing string conversion)
+        $resp = Invoke-WebRequest -Uri $ScriptPath -UseBasicParsing
+        # Check if Content is string or bytes
+        if ($resp.Content -is [string]) {
+            $str = $resp.Content
+            # Strip BOM character (U+FEFF) if present at start of string
+            if ($str.Length -gt 0 -and $str[0] -eq [char]0xFEFF) {
+                $str = $str.Substring(1)
+            }
+            $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+            $bytes = $utf8NoBom.GetBytes($str)
+        } else {
+            $bytes = $resp.Content
+        }
+        # Strip UTF-8 BOM (EF BB BF) if present in bytes
+        if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+            $bytes = $bytes[3..($bytes.Length-1)]
+        }
+        [System.IO.File]::WriteAllBytes($tmpScript, $bytes)
+    }
 
     try {
         $cmdArgs = @($tmpScript) + $Arguments
 
         if ($Interactive) {
-            # Chạy trực tiếp không qua 2>&1 để Python nhận input từ console
+            # Chay truc tiep khong qua 2>&1 de Python nhan input tu console
             & $pythonExe $cmdArgs
             $exitCode = $LASTEXITCODE
         } else {
@@ -225,57 +250,6 @@ function Invoke-PythonScriptInRam {
         throw "Python script exited with code $exitCode."
     }
 }
-
-# === Khởi tạo ===
-# Dọn file .py tạm từ lần chạy trước (nếu có)
-if (Test-Path $tempDir) {
-    Get-ChildItem "$tempDir\script_*.py" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
-}
-if (-not (Test-Python)) {
-    Get-PythonPortable
-    # Sau khi có portable, kiểm tra lại
-    if (-not (Test-PortablePython)) {
-        Write-Host "Không thể khởi tạo Python." -ForegroundColor Red
-        pause; exit 1
-    }
-}
-Write-Host "Đã sẵn sàng với Python: $pythonExe" -ForegroundColor Cyan
-
-# Kiểm tra và cài thư viện
-$checkLibs = @"
-import importlib, sys
-libs = [
-    'requests',
-    'psutil',
-    'gdown',
-    'pydrive2',
-    'yaml',
-    'cryptography'
-]
-missing = []
-for lib in libs:
-    try:
-        importlib.import_module(lib)
-    except:
-        missing.append(lib)
-if missing:
-    print('MISSING:' + ','.join(missing))
-    sys.exit(1)
-print('OK')
-"@
-$null = & $pythonExe -c $checkLibs 2>&1
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "Cài đặt thư viện cần thiết..." -ForegroundColor Cyan
-    & $pythonExe -m pip install --no-cache-dir --quiet --disable-pip-version-check --trusted-host pypi.org --trusted-host files.pythonhosted.org requests psutil gdown pydrive2 pyyaml cryptography 2>&1
-    $null = & $pythonExe -c $checkLibs 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "Không thể cài đặt thư viện. Hãy kiểm tra kết nối mạng." -ForegroundColor Red
-        pause
-        exit 1
-    }
-}
-
-# Kiểm tra dung lượng file tải về (phải đạt mức tối thiểu)
 function Test-DownloadSize {
     param(
         [string]$FilePath,
@@ -467,3 +441,8 @@ if ($host.Name -eq "ConsoleHost") {
     Write-Host "Nhấn Enter để thoát..." -ForegroundColor Yellow
     Read-Host
 }
+
+
+
+
+
