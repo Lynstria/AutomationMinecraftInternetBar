@@ -21,12 +21,64 @@ $defendsPyUrl          = "$REPO_RAW/.vscode/Defends.py"
 $uploadPyUrl           = "$REPO_RAW/.vscode/Upload.py"
 $decryptSecretsPyUrl  = "$REPO_RAW/.vscode/decrypt_secrets.py"
 
-# Link Google Drive – dùng ID để tạo direct link
-$graalvmFileId  = "1xrxfMiLBWOS2ptPOnUClHrNXOuozid_a"
-$versionsFileId = "1_JH04cXYbWSbhTmn3Y9jQFAf57DayWNM"
-$tlauncherUrl   = "https://dl1.tlauncher.org/f.php?f=files%2FTLauncher-Installer-1.9.5.1.exe"
+# Hàm đọc config.yaml (trả về hashtable)
+function Get-Config {
+    $configFile = Join-Path $PSScriptRoot 'config.yaml'
+    if (-not (Test-Path $configFile)) {
+        # Trả về default values nếu không có config.yaml
+        return @{
+            graalvmFileId       = "1xrxfMiLBWOS2ptPOnUClHrNXOuozid_a"
+            versionsFileId      = "1_JH04cXYbWSbhTmn3Y9jQFAf57DayWNM"
+            tlauncherUrl        = "https://dl1.tlauncher.org/f.php?f=files%2FTLauncher-Installer-1.9.5.1.exe"
+            pythonPortableFileId = "1YyD9-wLDuFIu5Z0O38PHF9I6iIDAt5oO"
+            javaDestRoot        = "C:\Java"
+            otpTimeoutSeconds   = 15
+        }
+    }
+    # Đọc YAML bằng Python one-liner (YAML là superset của JSON, dùng json.dump)
+    $pythonExeForConfig = if (Test-Path "$PSScriptRoot\.venv\Scripts\python.exe") {
+        "$PSScriptRoot\.venv\Scripts\python.exe"
+    } else {
+        "python.exe"
+    }
+    try {
+        $configJson = & $pythonExeForConfig -c @"
+import yaml, json, os
+config_path = os.path.join(os.path.dirname('$configFile'), 'config.yaml')
+with open(config_path, 'r') as f:
+    cfg = yaml.safe_load(f)
+print(json.dumps(cfg))
+"@ 2>&1
+        $config = $configJson | ConvertFrom-Json
+        return @{
+            graalvmFileId       = $config.graalvm_file_id
+            versionsFileId      = $config.versions_file_id
+            tlauncherUrl        = $config.tlauncher_url
+            pythonPortableFileId = $config.python_portable_file_id
+            javaDestRoot        = $config.java_dest_root
+            otpTimeoutSeconds   = $config.otp_timeout_seconds
+        }
+    } catch {
+        Write-Host "Lỗi đọc config.yaml: $_. Sử dụng default values." -ForegroundColor Yellow
+        return @{
+            graalvmFileId       = "1xrxfMiLBWOS2ptPOnUClHrNXOuozid_a"
+            versionsFileId      = "1_JH04cXYbWSbhTmn3Y9jQFAf57DayWNM"
+            tlauncherUrl        = "https://dl1.tlauncher.org/f.php?f=files%2FTLauncher-Installer-1.9.5.1.exe"
+            pythonPortableFileId = "1YyD9-wLDuFIu5Z0O38PHF9I6iIDAt5oO"
+            javaDestRoot        = "C:\Java"
+            otpTimeoutSeconds   = 15
+        }
+    }
+}
 
-$pythonPortableFileId = "1YyD9-wLDuFIu5Z0O38PHF9I6iIDAt5oO"
+$config = Get-Config
+$graalvmFileId  = $config.graalvmFileId
+$versionsFileId = $config.versionsFileId
+$tlauncherUrl   = $config.tlauncherUrl
+$pythonPortableFileId = $config.pythonPortableFileId
+$javaDestRoot   = $config.javaDestRoot
+$otpTimeoutSeconds = $config.otpTimeoutSeconds
+
 $pythonPortableFolder = "$tempDir\python_portable"
 $pythonExe            = "$pythonPortableFolder\Scripts\python.exe"
 # =========================
@@ -362,14 +414,9 @@ do {
 
                 # Chạy decrypt_secrets.py với đường dẫn secrets.enc
                 $output = Invoke-PythonScriptInRam -ScriptPath $decryptSecretsPyUrl -Arguments $secretsEncPath
-                foreach ($line in $output) {
-                    if ($line -match "^DISCORD_WEBHOOK_URL=(.+)$") {
-                        $env:DISCORD_WEBHOOK_URL = $Matches[1]
-                    }
-                    if ($line -match "^GOOGLE_CREDENTIALS_PATH=(.+)$") {
-                        $env:GOOGLE_CREDENTIALS_PATH = $Matches[1]
-                    }
-                }
+                $decrypted = $output | ConvertFrom-Json
+                $env:DISCORD_WEBHOOK_URL = $decrypted.discord_webhook
+                $env:GOOGLE_CREDENTIALS_PATH = $decrypted.google_credentials_path
                 Write-Host "[✅] Secrets đã sẵn sàng." -ForegroundColor Green
                 Invoke-PythonScriptInRam -ScriptPath $defendsPyUrl -Interactive
                 Write-Host "[✅] Xác thực OTP thành công." -ForegroundColor Green
