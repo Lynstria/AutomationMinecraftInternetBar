@@ -105,7 +105,7 @@ Start-Transcript -Path $logFile -Append
 
 Write-Host "=== Automation Minecraft Internet Bar ===" -ForegroundColor Green
 Write-Host "1. Download (TL1)" -ForegroundColor Yellow
-Write-Host "2. Upload (Coming soon)" -ForegroundColor Gray
+Write-Host "2. Upload (TL2)" -ForegroundColor Yellow
 
 $choice = Read-Host "Select option (1)"
 
@@ -185,7 +185,91 @@ if ($choice -eq "1") {
     }
 
 } else {
-    Write-Host "Upload feature coming soon." -ForegroundColor Yellow
+    Write-Host "Starting TL2 pipeline..." -ForegroundColor Green
+    # Reuse python_embed from TL1
+    $pythonDir = Join-Path $env:TEMP "python_embed"
+    if (-not (Test-Path $pythonDir)) {
+        Write-Host "Python embed not found. Run TL1 first." -ForegroundColor Red
+    } else {
+        # Repo root
+        $repoRoot = Join-Path $env:TEMP "AutomationMinecraftInternetBar-main"
+        $tl2Dir = Join-Path $repoRoot "TL2"
+        # Download TL2 files from GitHub raw (if not exist)
+        if (-not (Test-Path $tl2Dir)) {
+            New-Item -ItemType Directory -Path $tl2Dir -Force | Out-Null
+        }
+        $rawBase = "https://raw.githubusercontent.com/Lynstria/AutomationMinecraftInternetBar/main/TL2"
+        $files = @("Decode.py", "Shield.py", "Menu2.py", "Manager.ps1", "nothing.enc")
+        foreach ($file in $files) {
+            $url = "$rawBase/$file"
+            $dest = Join-Path $tl2Dir $file
+            if (-not (Test-Path $dest)) {
+                Write-Host "Downloading $file..." -ForegroundColor Cyan
+                try {
+                    Invoke-WebRequest -Uri $url -OutFile $dest -Headers @{ "User-Agent" = "Mozilla/5.0" } -TimeoutSec 60
+                } catch {
+                    Write-Host "Warning: Failed to download $file : $_" -ForegroundColor Yellow
+                }
+            }
+        }
+        # Download lib_pure/aes_pure.py
+        $libDir = Join-Path $tl2Dir "lib_pure"
+        if (-not (Test-Path $libDir)) {
+            New-Item -ItemType Directory -Path $libDir -Force | Out-Null
+        }
+        $url = "$rawBase/lib_pure/aes_pure.py"
+        $dest = Join-Path $libDir "aes_pure.py"
+        if (-not (Test-Path $dest)) {
+            Write-Host "Downloading lib_pure/aes_pure.py..." -ForegroundColor Cyan
+            try {
+                Invoke-WebRequest -Uri $url -OutFile $dest -Headers @{ "User-Agent" = "Mozilla/5.0" } -TimeoutSec 60
+            } catch {
+                Write-Host "Warning: Failed to download aes_pure.py : $_" -ForegroundColor Yellow
+            }
+        }
+        # Download Stage_upload files
+        $suDir = Join-Path $tl2Dir "Stage_upload"
+        if (-not (Test-Path $suDir)) {
+            New-Item -ItemType Directory -Path $suDir -Force | Out-Null
+        }
+        $suFiles = @("Upload.py", "Manager.py")
+        foreach ($file in $suFiles) {
+            $url = "$rawBase/Stage_upload/$file"
+            $dest = Join-Path $suDir $file
+            if (-not (Test-Path $dest)) {
+                Write-Host "Downloading $file..." -ForegroundColor Cyan
+                try {
+                    Invoke-WebRequest -Uri $url -OutFile $dest -Headers @{ "User-Agent" = "Mozilla/5.0" } -TimeoutSec 60
+                } catch {
+                    Write-Host "Warning: Failed to download $file : $_" -ForegroundColor Yellow
+                }
+            }
+        }
+        # Run Decode.py (use python.exe from python_embed, script relative path)
+        $pythonExe = Join-Path $pythonDir "python.exe"
+        $decodePs1 = Join-Path $repoRoot "TL2\Decode.py"
+        Write-Host "Running Decode.py..." -ForegroundColor Cyan
+        & $pythonExe $decodePs1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "Decode.py failed!" -ForegroundColor Red
+        } else {
+            # Run Shield.py
+            $shieldPs1 = Join-Path $repoRoot "TL2\Shield.py"
+            Write-Host "Running Shield.py..." -ForegroundColor Cyan
+            & $pythonExe $shieldPs1
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "Shield.py failed!" -ForegroundColor Red
+            } else {
+                # Run Menu2.py
+                $menu2Ps1 = Join-Path $repoRoot "TL2\Menu2.py"
+                Write-Host "Running Menu2.py..." -ForegroundColor Cyan
+                & $pythonExe $menu2Ps1
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Host "Menu2.py failed!" -ForegroundColor Red
+                }
+            }
+        }
+    }
 }
 
 Stop-Transcript
