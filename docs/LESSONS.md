@@ -42,3 +42,11 @@
 - Caveman mode: cắt giảm ~75% tokens
 - Git: tạo commit mới, không amend (trừ khi user yêu cầu)
 - Không dùng `Dism`, `sfc /scannow` (AtlasOS blocked)
+
+## Bài học vàng (sau rollback 2026-05-08)
+1. **Code tốt ≠ User hài lòng:** 31/31 tests pass nhưng vẫn rollback vì quá phức tạp
+2. **KISS principle:** v1.0 ổn định > v2.0 phức tạp (Google Drive API > rclone?)
+3. **Demo trước khi implement:** Cho user xem plan, confirm trước khi code
+4. **Hiểu đúng user:** "stdlib-only" nghĩa là dùng stdlib thật, không dùng cryptography lib
+5. **TDD không cứu được requirement sai:** Tests pass nhưng user không muốn complexity
+6. **Hỏi lại khi không chắc:** User nói "stdlib-only broken" → phải hỏi lại, đừng giả định
