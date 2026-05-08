@@ -1,4 +1,4 @@
-"""Exec.py - Install Tlauncher, extract GraalVM, setup Java.
+r"""Exec.py - Install Tlauncher, extract GraalVM, setup Java.
 # -*- coding: utf-8 -*-
 Stdlib only: subprocess, zipfile, os, shutil.
 """
@@ -10,7 +10,7 @@ import shutil
 
 
 def setup_logging():
-    """Setup logging. Read log path from %TEMP%\mc_log_path.txt."""
+    r"""Setup logging. Read log path from %TEMP%\mc_log_path.txt."""
     import logging
     log_path_file = os.path.join(os.environ.get("TEMP", "C:\\Temp"), "mc_log_path.txt")
     if os.path.exists(log_path_file):
@@ -29,7 +29,7 @@ def setup_logging():
 
 
 def read_download_path():
-    """Read download dir from %TEMP%\mc_path.txt. Return path or None."""
+    r"""Read download dir from %TEMP%\mc_path.txt. Return path or None."""
     temp_dir = os.environ.get("TEMP", "C:\\Temp")
     mc_path_file = os.path.join(temp_dir, "mc_path.txt")
     if not os.path.exists(mc_path_file):
@@ -73,7 +73,7 @@ def run_tlauncher_installer(installer_path):
 
 
 def setup_java(graalvm_zip_path, downloads_dir):
-    """Extract GraalVM, move to C:\Java\. Return java.exe path or None."""
+    r"""Extract GraalVM, move to C:\Java\. Return java.exe path or None."""
     # Extract GraalVM
     extract_dir = os.path.join(downloads_dir, "graalvm_extract")
     if not extract_zip(graalvm_zip_path, extract_dir):
@@ -101,7 +101,7 @@ def setup_java(graalvm_zip_path, downloads_dir):
 
 
 def install_versions(versions_zip_path, downloads_dir):
-    """Extract versions.zip, move versions folder to .minecraft\. Return True on success."""
+    r"""Extract versions.zip, move versions folder to .minecraft\. Return True on success."""
     # Find .minecraft folder
     minecraft_dir = None
     for appdata in ["APPDATA", "LOCALAPPDATA"]:
