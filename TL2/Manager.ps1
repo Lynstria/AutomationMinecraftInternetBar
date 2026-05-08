@@ -20,7 +20,7 @@ function Get-AccessToken {
         $resp = Invoke-RestMethod -Uri "https://oauth2.googleapis.com/token" -Method POST -Body $body -ContentType "application/x-www-form-urlencoded"
         return $resp.access_token
     } catch {
-        Write-Host "Failed to get access token: $_" -ForegroundColor Red
+        Write-Host "Failed to get access token: $($_)" -ForegroundColor Red
         return $null
     }
 }
@@ -37,7 +37,7 @@ function Remove-Revisions {
             Invoke-RestMethod -Uri $url -Method DELETE -Headers @{ Authorization = "Bearer $token" } | Out-Null
             Write-Host "Deleted revision $id" -ForegroundColor Green
         } catch {
-            Write-Host "Failed to delete $id: $_" -ForegroundColor Red
+            Write-Host "Failed to delete ${id}: $($_)" -ForegroundColor Red
             $ok = $false
         }
     }
