@@ -8,9 +8,6 @@ import sys
 import urllib.request
 import time
 import re
-import logging
-
-logger = logging.getLogger(__name__)
 
 
 class FakeResp:
@@ -82,7 +79,6 @@ def _is_html(data):
 
 def _download_gdrive(url, dest, timeout=300):
     """Download from Google Drive with streaming. Handle virus warning confirm."""
-    logger.info("[_download_gdrive] START url=%s dest=%s timeout=%s", url, dest, timeout)
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
 
     # First request
@@ -90,22 +86,17 @@ def _download_gdrive(url, dest, timeout=300):
     try:
         resp = urllib.request.urlopen(req, timeout=timeout)
         first_chunk = resp.read(8192)
-        logger.info("[_download_gdrive] First request OK, first_chunk size=%d", len(first_chunk))
     except urllib.error.HTTPError as e:
         first_chunk = e.read(8192) if hasattr(e, 'read') else b""
         resp = e
-        logger.warning("[_download_gdrive] HTTPError, first_chunk size=%d", len(first_chunk))
     except Exception as e:
-        logger.error("[_download_gdrive] Exception: %s", e)
         return False
 
     if not first_chunk:
-        logger.error("[_download_gdrive] first_chunk is empty, return False")
         return False
 
     # Check if response is virus warning page
     is_html = _is_html(first_chunk)
-    logger.info("[_download_gdrive] is_html=%s", is_html)
     if is_html:
         html_bytes = first_chunk
         if hasattr(resp, 'read'):
@@ -117,33 +108,24 @@ def _download_gdrive(url, dest, timeout=300):
 
         # Parse form from virus warning page
         action, fields = _parse_gdrive_form(html)
-        logger.info("[_download_gdrive] Form parsed: action=%s fields=%s", action, list(fields.keys()))
         if not action or "confirm" not in fields:
-            logger.error("[_download_gdrive] Form parse failed: action=%s has_confirm=%s", action, "confirm" in fields)
             return False
 
         # Build URL from form action + all fields
         params = "&".join(f"{k}={v}" for k, v in fields.items())
         url2 = action + "?" + params
-        logger.info("[_download_gdrive] Retry URL (first 100 chars): %s", url2[:100])
         req2 = urllib.request.Request(url2, headers=headers)
         try:
             resp2 = urllib.request.urlopen(req2, timeout=timeout)
-            logger.info("[_download_gdrive] Retry response received")
-            # Check if still HTML (some cases need additional auth)
             chunk2 = resp2.read(8192)
             if _is_html(chunk2):
-                logger.error("[_download_gdrive] Retry still returns HTML, aborting")
                 return False
-            logger.info("[_download_gdrive] Retry OK, first chunk size=%d, starting stream...", len(chunk2))
             fake2 = FakeResp(chunk2, resp2)
             return _stream_to_file(fake2, dest, timeout)
-        except Exception as e:
-            logger.error("[_download_gdrive] Retry exception: %s", e)
+        except Exception:
             return False
 
     # Not virus warning - stream the file
-    logger.info("[_download_gdrive] Not virus warning, streaming directly")
     fake = FakeResp(first_chunk, resp if 'resp' in locals() else None)
     return _stream_to_file(fake, dest, timeout)
 
@@ -152,46 +134,30 @@ def _stream_to_file(resp, dest, timeout=300):
     """Stream response to temp file, then atomically replace."""
     tmp = dest + ".part"
     downloaded = 0
-    logger.info("[_stream_to_file] START dest=%s tmp=%s", dest, tmp)
     try:
         with open(tmp, "wb") as f:
             while True:
                 try:
                     chunk = resp.read(8192)
-                except Exception as e:
-                    logger.warning("[_stream_to_file] Read exception: %s, downloaded=%d", e, downloaded)
+                except Exception:
                     break
                 if not chunk:
-                    logger.info("[_stream_to_file] Empty chunk, breaking")
                     break
                 f.write(chunk)
                 downloaded += len(chunk)
-                if downloaded % (10 * 1024 * 1024) < 8192:  # Log every ~10MB
+                if downloaded % (10 * 1024 * 1024) < 8192:
                     mb = downloaded // (1024 * 1024)
                     print(f"[INFO] Downloaded {mb} MB", flush=True)
-                    logger.info("[_stream_to_file] Downloaded %d MB", mb)
-        logger.info("[_stream_to_file] Loop done, downloaded=%d, tmp exists=%s",
-                    downloaded, os.path.exists(tmp))
         if os.path.exists(tmp) and os.path.getsize(tmp) > 0:
-            logger.info("[_stream_to_file] Calling os.replace(%s -> %s), size=%d",
-                        tmp, dest, os.path.getsize(tmp))
             os.replace(tmp, dest)
-            logger.info("[_stream_to_file] os.replace done, dest exists=%s", os.path.exists(dest))
             return True
-        else:
-            logger.error("[_stream_to_file] NOT calling os.replace: exists=%s size=%s",
-                        os.path.exists(tmp), os.path.getsize(tmp) if os.path.exists(tmp) else "N/A")
         return False
-    except Exception as e:
-        logger.error("[_stream_to_file] Exception: %s, downloaded=%d, tmp exists=%s",
-                    e, downloaded, os.path.exists(tmp))
-        # Keep .part file on error for debugging (don't delete)
+    except Exception:
         return False
 
 
 def download_file(url, dest, retries=3, timeout=300):
     """Download URL to dest with streaming. Retry on fail. Return True on success."""
-    # Increase timeout for Google Drive large files (1.4GB can take >5min)
     if "drive.google.com" in url:
         timeout = 600
     for attempt in range(retries):
@@ -203,8 +169,7 @@ def download_file(url, dest, retries=3, timeout=300):
             req = urllib.request.Request(url, headers=headers)
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 return _stream_to_file(resp, dest, timeout)
-        except Exception as e:
-            logger.warning("[download_file] Attempt %d/%d failed: %s", attempt+1, retries, e)
+        except Exception:
             if attempt < retries - 1:
                 time.sleep(2 * (attempt + 1))
     return False
@@ -233,39 +198,10 @@ def download_versions(dest_dir):
     return dest if ok else None
 
 
-def setup_logging():
-    """Setup logging. Read log path from %TEMP%\\mc_log_path.txt."""
-    import logging
-    log_path_file = os.path.join(os.environ.get("TEMP", "C:\\Temp"), "mc_log_path.txt")
-    if os.path.exists(log_path_file):
-        with open(log_path_file, encoding="utf-8-sig") as f:
-            log_file = f.read().strip()
-    else:
-        log_file = os.path.join(os.environ.get("TEMP", "C:\\Temp"), "download.log")
-
-    # Use module-level logger directly
-    global logger
-    logger = logging.getLogger(__name__)
-    logger.setLevel(logging.INFO)
-    # Clear old handlers to avoid duplicates
-    logger.handlers.clear()
-
-    # File handler only (console output via print for real-time progress)
-    fh = logging.FileHandler(log_file, encoding="utf-8")
-    fh.setLevel(logging.INFO)
-    fh.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s", "%Y-%m-%d %H:%M:%S"))
-    logger.addHandler(fh)
-
-    return logger
-
-
 def run_downloads(dest_dir=None):
     """Download all 3 files. Return dict with paths. Write mc_path.txt."""
     if dest_dir is None:
         dest_dir = get_downloads_folder()
-
-    logger = setup_logging()
-    logger.info("Starting downloads to %s", dest_dir)
 
     results = {}
     files = [
@@ -279,25 +215,19 @@ def run_downloads(dest_dir=None):
     for name, display_name, func in files:
         idx += 1
         print(f"[{idx}/{total}] Downloading {display_name}...", flush=True)
-        logger.info("Downloading %s...", name)
         path = func(dest_dir)
         if path:
-            logger.info("%s OK: %s", name, path)
             results[name] = path
         else:
             print(f"  {display_name} FAILED!", flush=True)
-            logger.error("%s FAILED", name)
 
-        # Delay 2s between files for network stability
         if idx < total:
             time.sleep(2)
 
-    # Write download dir path to mc_path.txt
     mc_path_file = os.path.join(os.environ.get("TEMP", "C:\\Temp"), "mc_path.txt")
     with open(mc_path_file, "w", encoding="utf-8") as f:
         f.write(dest_dir)
 
-    logger.info("Download dir written to %s", mc_path_file)
     return results
 
 

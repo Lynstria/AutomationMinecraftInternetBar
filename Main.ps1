@@ -4,6 +4,7 @@
 $OutputEncoding = [System.Text.Encoding]::UTF8
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $ErrorActionPreference = "Continue"
+$env:PYTHONUNBUFFERED = "1"
 
 # GitHub raw base URL
 $RAW_BASE = "https://raw.githubusercontent.com/Lynstria/AutomationMinecraftInternetBar/main/TL1"
@@ -58,71 +59,89 @@ function Invoke-PythonScript {
     return $true
 }
 
-try {
-    Get-WebFile -url $repoUrl -outFile $repoZip -activity "Downloading repo"
-    if (Test-Path $repoDir) {
-        Remove-Item $repoDir -Recurse -Force -ErrorAction SilentlyContinue
-    }
-    Expand-Archive -Path $repoZip -DestinationPath $env:TEMP -Force
-    Write-Host "Repo extracted" -ForegroundColor Green
+# Check if repo already exists with essential files
+$essentialFiles = @(
+    (Join-Path $repoDir "Main.ps1"),
+    (Join-Path $repoDir "TL1\Download.py"),
+    (Join-Path $repoDir "TL1\Exec.py"),
+    (Join-Path $repoDir "TL1\CustomCore.py"),
+    (Join-Path $repoDir "TL2\nothing.enc"),
+    (Join-Path $repoDir "TL2\Decode.py"),
+    (Join-Path $repoDir "TL2\Shield.py"),
+    (Join-Path $repoDir "TL2\Menu2.py")
+)
 
-    # Check required TL2 files (especially nothing.enc)
-    $tl2Files = @(
-        (Join-Path $repoDir "TL2\nothing.enc"),
-        (Join-Path $repoDir "TL2\Decode.py"),
-        (Join-Path $repoDir "TL2\Shield.py"),
-        (Join-Path $repoDir "TL2\Menu2.py"),
-        (Join-Path $repoDir "TL2\lib_pure\aes_pure.py")
-    )
-    $missing = $false
-    foreach ($file in $tl2Files) {
-        if (-not (Test-Path $file)) {
-            Write-Host "Thieu file: $file" -ForegroundColor Red
-            $missing = $true
+$repoReady = $false
+if (Test-Path $repoDir) {
+    $allExist = $true
+    foreach ($f in $essentialFiles) {
+        if (-not (Test-Path $f)) {
+            $allExist = $false
+            break
         }
     }
-    if ($missing) {
-        Write-Host "Repo missing files. Check GitHub repo." -ForegroundColor Red
-        exit 1
+    if ($allExist) {
+        Write-Host "Repo already exists with all files, skipping download." -ForegroundColor Green
+        $repoReady = $true
+    } else {
+        Write-Host "Repo exists but missing files, re-downloading..." -ForegroundColor Yellow
     }
-    Write-Host "All TL2 files ok" -ForegroundColor Green
-} catch {
-    Write-Host "Failed to download repo: $_" -ForegroundColor Red
-    exit 1
 }
 
-# Download Python embed
+if (-not $repoReady) {
+    try {
+        Get-WebFile -url $repoUrl -outFile $repoZip -activity "Downloading repo"
+        if (Test-Path $repoDir) {
+            Remove-Item $repoDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+        Expand-Archive -Path $repoZip -DestinationPath $env:TEMP -Force
+        Write-Host "Repo extracted" -ForegroundColor Green
+
+        # Verify essential files after extract
+        $missing = $false
+        foreach ($f in $essentialFiles) {
+            if (-not (Test-Path $f)) {
+                Write-Host "Missing file: $f" -ForegroundColor Red
+                $missing = $true
+            }
+        }
+        if ($missing) {
+            Write-Host "Repo missing files. Check GitHub repo." -ForegroundColor Red
+            exit 1
+        }
+        Write-Host "All files ok" -ForegroundColor Green
+        $repoReady = $true
+    } catch {
+        Write-Host "Failed to download repo: $_" -ForegroundColor Red
+        exit 1
+    }
+}
+
+# Download Python embed (skip if exists)
 $embedUrl = "https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip"
 $embedZip = Join-Path $env:TEMP "python_embed.zip"
 $embedDir = Join-Path $repoDir "python_embed"
 
-try {
-    Get-WebFile -url $embedUrl -outFile $embedZip -activity "Downloading Python embed"
-    if (Test-Path $embedDir) {
-        Remove-Item $embedDir -Recurse -Force -ErrorAction SilentlyContinue
+$embedReady = $false
+if ((Test-Path $embedDir) -and (Test-Path (Join-Path $embedDir "python.exe"))) {
+    Write-Host "Python embed already exists, skipping download." -ForegroundColor Green
+    $embedReady = $true
+}
+
+if (-not $embedReady) {
+    try {
+        Get-WebFile -url $embedUrl -outFile $embedZip -activity "Downloading Python embed"
+        if (Test-Path $embedDir) {
+            Remove-Item $embedDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+        New-Item -ItemType Directory -Path $embedDir -Force | Out-Null
+        Expand-Archive -Path $embedZip -DestinationPath $embedDir -Force
+        Write-Host "Python embed ready" -ForegroundColor Green
+    } catch {
+        Write-Host "Failed to download Python embed: $_" -ForegroundColor Red
+        exit 1
     }
-    New-Item -ItemType Directory -Path $embedDir -Force | Out-Null
-    Expand-Archive -Path $embedZip -DestinationPath $embedDir -Force
-    Write-Host "Python embed ready" -ForegroundColor Green
-} catch {
-    Write-Host "Failed to download Python embed: $_" -ForegroundColor Red
-    exit 1
 }
-
-# Log setup
-function Write-LogPath {
-    $desktop = [Environment]::GetFolderPath("Desktop")
-    $dateStr = Get-Date -Format "HH-dd-MM"
-    $logFile = Join-Path $desktop "mc-automation$dateStr.log"
-    $pythonLogFile = Join-Path $desktop "mc-automation${dateStr}_python.log"
-    $logPathFile = Join-Path $env:TEMP "mc_log_path.txt"
-    Set-Content -Path $logPathFile -Value $pythonLogFile -Encoding UTF8
-    return $logFile
-}
-
-$logFile = Write-LogPath
-Start-Transcript -Path $logFile -Append
-$transcriptStopped = $false
 
 while ($true) {
     Write-Host "=== Automation Minecraft Internet Bar ===" -ForegroundColor Green
@@ -136,7 +155,6 @@ while ($true) {
 
     if ($choice -eq "1") {
         try {
-            # Run Download.py from repo dir (no need to re-download .py files)
             $tl1Dir = Join-Path $repoDir "TL1"
             $ok = Invoke-PythonScript -pythonDir $embedDir -scriptPath (Join-Path $tl1Dir "Download.py")
             if (-not $ok) {
@@ -144,7 +162,6 @@ while ($true) {
                 $hasError = $true
             }
 
-            # Run Exec.py (only if Download.py succeeded)
             if (-not $hasError) {
                 $ok = Invoke-PythonScript -pythonDir $embedDir -scriptPath (Join-Path $tl1Dir "Exec.py")
                 if (-not $ok) {
@@ -153,7 +170,6 @@ while ($true) {
                 }
             }
 
-            # Run CustomCore.py (only if Exec.py succeeded)
             if (-not $hasError) {
                 $ok = Invoke-PythonScript -pythonDir $embedDir -scriptPath (Join-Path $tl1Dir "CustomCore.py")
                 if (-not $ok) {
@@ -171,36 +187,30 @@ while ($true) {
             $hasError = $true
         }
 
-        # Ask user about log
+        # Ask user about temp files
         Write-Host ""
-        Write-Host "Log saved: $logFile" -ForegroundColor Cyan
-        Write-Host "1. Keep log" -ForegroundColor Yellow
-        Write-Host "2. Delete all (temp files + log)" -ForegroundColor Yellow
+        Write-Host "1. Keep temp files (repo + python_embed)" -ForegroundColor Yellow
+        Write-Host "2. Delete all (temp files + repo)" -ForegroundColor Yellow
         $cleanChoice = Read-Host "Select option"
 
         if ($cleanChoice -eq "2") {
             $tempFiles = @(
                 (Join-Path $env:TEMP "mc_path.txt"),
-                (Join-Path $env:TEMP "mc_log_path.txt"),
                 (Join-Path $env:TEMP "python_embed.zip"),
                 (Join-Path $env:TEMP "python_embed"),
                 (Join-Path $env:TEMP "GraalVM.zip"),
                 (Join-Path $env:TEMP "versions.zip"),
-                (Join-Path $env:TEMP "Tlauncher-Installer-1.9.5.1.exe")
+                (Join-Path $env:TEMP "Tlauncher-Installer-1.9.5.1.exe"),
+                $repoDir
             )
             foreach ($file in $tempFiles) {
                 if (Test-Path $file) {
                     Remove-Item $file -Recurse -Force -ErrorAction SilentlyContinue
                 }
             }
-            if (Test-Path $logFile) {
-                try { Stop-Transcript } catch {}
-                $transcriptStopped = $true
-                Remove-Item $logFile -Force
-                Write-Host "Deleted all temp files and log." -ForegroundColor Green
-            }
+            Write-Host "Deleted all temp files and repo." -ForegroundColor Green
         } else {
-            Write-Host "Log kept: $logFile" -ForegroundColor Cyan
+            Write-Host "Temp files kept: $repoDir, $embedDir" -ForegroundColor Cyan
         }
 
     } elseif ($choice -eq "2") {
@@ -208,14 +218,12 @@ while ($true) {
         $pythonExe = Join-Path $embedDir "python.exe"
         $repoRoot = $repoDir
 
-        # Check nothing.enc exists before running Decode.py
         $nothingEnc = Join-Path $repoRoot "TL2\nothing.enc"
         if (-not (Test-Path $nothingEnc)) {
             Write-Host "Error: nothing.enc not found at $nothingEnc" -ForegroundColor Red
             continue
         }
 
-        # Run Decode.py
         $decodePs1 = Join-Path $repoRoot "TL2\Decode.py"
         Write-Host "Decrypting..." -ForegroundColor Cyan
         & $pythonExe $decodePs1
@@ -224,7 +232,6 @@ while ($true) {
         } else {
             Write-Host "Decryption successful!" -ForegroundColor Green
 
-            # Run Shield.py
             $shieldPs1 = Join-Path $repoRoot "TL2\Shield.py"
             Write-Host "Sending auth code..." -ForegroundColor Cyan
             & $pythonExe $shieldPs1
@@ -233,7 +240,6 @@ while ($true) {
             } else {
                 Write-Host "Auth sent!" -ForegroundColor Green
 
-                # Run Menu2.py
                 $menu2Ps1 = Join-Path $repoRoot "TL2\Menu2.py"
                 Write-Host "Opening Menu2..." -ForegroundColor Cyan
                 & $pythonExe $menu2Ps1
@@ -249,5 +255,3 @@ while ($true) {
         break
     }
 }
-
-if (-not $transcriptStopped) { Stop-Transcript }
