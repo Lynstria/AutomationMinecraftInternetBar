@@ -1,4 +1,5 @@
 """Download.py - Download 3 files: Tlauncher.exe, GraalVM.zip, versions.zip.
+# -*- coding: utf-8 -*-
 Stdlib only: urllib.request, zipfile, json, os, shutil.
 """
 

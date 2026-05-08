@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """Manager.py - List Drive versions, write temp JSON, call Manager.ps1"""
 import sys, os, json, tempfile, urllib.request, urllib.parse
 

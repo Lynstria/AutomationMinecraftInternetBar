@@ -1,6 +1,8 @@
 # Main.ps1 - Automation Minecraft Internet Bar
 # Pipeline: Download repo.zip -> python_embed -> TL1/TL2
 
+$OutputEncoding = [System.Text.Encoding]::UTF8
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $ErrorActionPreference = "Continue"
 
 # GitHub raw base URL

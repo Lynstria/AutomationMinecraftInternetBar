@@ -1,4 +1,5 @@
 """CustomCore.py - Write java config to .tlauncher folder.
+# -*- coding: utf-8 -*-
 Stdlib only: json, os.
 """
 

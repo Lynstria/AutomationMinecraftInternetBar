@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """Decode.py - AES256 decrypt nothing.enc, test Discord API, write Code.txt"""
 import sys, os, json, urllib.request, urllib.error
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'lib_pure'))

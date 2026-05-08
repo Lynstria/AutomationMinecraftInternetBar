@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """Menu2.py - TL2 menu: 1=Upload, 2=Manager"""
 import sys, os, subprocess
 

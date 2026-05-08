@@ -1,4 +1,5 @@
 """Exec.py - Install Tlauncher, extract GraalVM, setup Java.
+# -*- coding: utf-8 -*-
 Stdlib only: subprocess, zipfile, os, shutil.
 """
 

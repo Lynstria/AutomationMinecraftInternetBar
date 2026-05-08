@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """OAuth2 helper - use refresh_token to get access_token for Drive API."""
 import sys, os, json, urllib.request, urllib.parse
 
