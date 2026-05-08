@@ -1,4 +1,4 @@
-﻿# Main.ps1 - Automation Minecraft Internet Bar
+# Main.ps1 - Automation Minecraft Internet Bar
 # Pipeline: Download repo.zip -> python_embed -> TL1/TL2
 
 $OutputEncoding = [System.Text.Encoding]::UTF8
@@ -288,4 +288,4 @@ while ($true) {
     }
 }
 
-Stop-Transcript
+if (-not $transcriptStopped) { Stop-Transcript }
