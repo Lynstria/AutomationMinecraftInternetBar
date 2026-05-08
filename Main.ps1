@@ -44,9 +44,40 @@ function Invoke-PythonScript {
     $prevErrorPref = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
 
-    # Run via cmd /c to force stdout to console (fix irm|iex subprocess output issue)
-    cmd.exe /c "`"$pythonExe`" `"$scriptPath`""
-    $exitCode = $LASTEXITCODE
+    # Run Python, stream stdout+stderr to console in real-time (fix irm|iex output loss)
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = $pythonExe
+    $psi.Arguments = "`"$scriptPath`""
+    $psi.UseShellExecute = $false
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+    $psi.CreateNoWindow = $true
+    $psi.StandardOutputEncoding = [System.Text.Encoding]::UTF8
+    $psi.StandardErrorEncoding = [System.Text.Encoding]::UTF8
+    $proc = New-Object System.Diagnostics.Process
+    $proc.StartInfo = $psi
+    $proc.Start() | Out-Null
+    while (-not $proc.HasExited) {
+        while (-not $proc.StandardOutput.EndOfStream) {
+            $line = $proc.StandardOutput.ReadLine()
+            if ($line) { Write-Host $line }
+        }
+        while (-not $proc.StandardError.EndOfStream) {
+            $line = $proc.StandardError.ReadLine()
+            if ($line) { Write-Host $line -ForegroundColor Red }
+        }
+        Start-Sleep -Milliseconds 100
+    }
+    # Final flush
+    while (-not $proc.StandardOutput.EndOfStream) {
+        $line = $proc.StandardOutput.ReadLine()
+        if ($line) { Write-Host $line }
+    }
+    while (-not $proc.StandardError.EndOfStream) {
+        $line = $proc.StandardError.ReadLine()
+        if ($line) { Write-Host $line -ForegroundColor Red }
+    }
+    $exitCode = $proc.ExitCode
 
     $ErrorActionPreference = $prevErrorPref
 
