@@ -43,27 +43,13 @@ function Invoke-PythonScript {
         return $false
     }
 
-    $stdoutFile = Join-Path $env:TEMP "python_stdout.txt"
-    $stderrFile = Join-Path $env:TEMP "python_stderr.txt"
-
     $prevErrorPref = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
 
-    & $pythonExe $scriptPath > $stdoutFile 2> $stderrFile
+    & $pythonExe $scriptPath
     $exitCode = $LASTEXITCODE
 
     $ErrorActionPreference = $prevErrorPref
-
-    if (Test-Path $stdoutFile) {
-        $stdout = Get-Content $stdoutFile -Raw
-        if ($stdout) { Write-Host $stdout }
-        Remove-Item $stdoutFile -Force -ErrorAction SilentlyContinue
-    }
-    if (Test-Path $stderrFile) {
-        $stderr = Get-Content $stderrFile -Raw
-        if ($stderr) { Write-Host "STDERR: $stderr" -ForegroundColor Yellow }
-        Remove-Item $stderrFile -Force -ErrorAction SilentlyContinue
-    }
 
     if ($exitCode -ne 0) {
         Write-Host "$scriptName exited with code $exitCode" -ForegroundColor Red
