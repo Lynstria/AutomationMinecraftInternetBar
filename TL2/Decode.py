@@ -41,9 +41,11 @@ def main():
         if data is None:
             print(f"Lần {attempt}/{MAX_ATTEMPTS}: Sai mã hoặc file lỗi")
             continue
-        # Validate JSON fields
-        if 'discord' not in data or 'drive' not in data:
-            print(f"Lần {attempt}/{MAX_ATTEMPTS}: JSON thiếu fields")
+        # Validate JSON fields (discord + OAuth2 fields)
+        required = ['discord', 'refresh_token', 'client_id', 'client_secret']
+        missing = [f for f in required if f not in data]
+        if missing:
+            print(f"Lần {attempt}/{MAX_ATTEMPTS}: JSON thiếu fields: {missing}")
             continue
         discord_url = data['discord']
         # Test Discord API

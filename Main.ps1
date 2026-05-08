@@ -1,4 +1,4 @@
-﻿# Main.ps1 - Automation Minecraft Internet Bar
+# Main.ps1 - Automation Minecraft Internet Bar
 # Pipeline: Download repo.zip -> python_embed -> TL1/TL2
 
 $ErrorActionPreference = "Continue"
