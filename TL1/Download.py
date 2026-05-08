@@ -32,7 +32,7 @@ class FakeResp:
         return b""
 
 
-TLUANCHER_FALLBACK = "https://dl1.tlauncher.org/f.php?f=files%2FTLauncher-Installer-1.9.5.1.exe"
+TLAUNCHER_FALLBACK = "https://dl1.tlauncher.org/f.php?f=files%2FTLauncher-Installer-1.9.5.1.exe"
 GRAALVM_ID = "1xrxfMiLBWOS2ptPOnUClHrNXOuozid_a"
 VERSIONS_ID = "1_JH04cXYbWSbhTmn3Y9jQFAf57DayWNM"
 GDRIVE_URL = "https://drive.google.com/uc?export=download&id={}"
