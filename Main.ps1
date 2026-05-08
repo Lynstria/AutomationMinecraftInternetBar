@@ -1,4 +1,4 @@
-# Main.ps1 - Automation Minecraft Internet Bar
+﻿# Main.ps1 - Automation Minecraft Internet Bar
 # Pipeline: Download repo.zip -> python_embed -> TL1/TL2
 
 $OutputEncoding = [System.Text.Encoding]::UTF8
@@ -71,7 +71,7 @@ function Invoke-PythonScript {
 }
 
 try {
-    Get-WebFile -url $repoUrl -outFile $repoZip -activity "Dang tai repo"
+    Get-WebFile -url $repoUrl -outFile $repoZip -activity "Downloading repo"
     if (Test-Path $repoDir) {
         Remove-Item $repoDir -Recurse -Force -ErrorAction SilentlyContinue
     }
@@ -94,10 +94,10 @@ try {
         }
     }
     if ($missing) {
-        Write-Host "Repo khong day du file. Hay kiem tra GitHub repo." -ForegroundColor Red
+        Write-Host "Repo missing files. Check GitHub repo." -ForegroundColor Red
         exit 1
     }
-    Write-Host "Tat ca file TL2 ok" -ForegroundColor Green
+    Write-Host "All TL2 files ok" -ForegroundColor Green
 } catch {
     Write-Host "Failed to download repo: $_" -ForegroundColor Red
     exit 1
@@ -109,7 +109,7 @@ $embedZip = Join-Path $env:TEMP "python_embed.zip"
 $embedDir = Join-Path $repoDir "python_embed"
 
 try {
-    Get-WebFile -url $embedUrl -outFile $embedZip -activity "Dang tai Python embed"
+    Get-WebFile -url $embedUrl -outFile $embedZip -activity "Downloading Python embed"
     if (Test-Path $embedDir) {
         Remove-Item $embedDir -Recurse -Force -ErrorAction SilentlyContinue
     }
@@ -134,6 +134,7 @@ function Write-LogPath {
 
 $logFile = Write-LogPath
 Start-Transcript -Path $logFile -Append
+$transcriptStopped = $false
 
 while ($true) {
     Write-Host "=== Automation Minecraft Internet Bar ===" -ForegroundColor Green
@@ -151,13 +152,13 @@ while ($true) {
         try {
             # Download .py files to python_embed dir
             $pyFiles = @("Download.py", "Exec.py", "CustomCore.py", "minecraft_tlauncher_java_config.json")
-            Write-Host "Dang tai cac file TL1..." -ForegroundColor Cyan
+            Write-Host "Downloading TL1 files..." -ForegroundColor Cyan
             $total = $pyFiles.Count
             $count = 0
             foreach ($file in $pyFiles) {
                 $count++
                 $percent = [math]::Floor(($count / $total) * 100)
-                Show-Progress $percent "TL1 files"
+                Write-Progress -Activity "TL1 files" -PercentComplete $percent
                 $url = "$RAW_BASE/$file"
                 $dest = Join-Path $embedDir $file
                 try {
@@ -171,7 +172,7 @@ while ($true) {
                     }
                 }
             }
-            Show-Progress 100 "TL1 files"
+            Write-Progress -Activity "TL1 files" -Completed
             Write-Host ""
 
             # Run Download.py
@@ -200,7 +201,7 @@ while ($true) {
             }
 
             if (-not $hasError) {
-                Write-Host "Nhanh 1 hoan thanh! Gio ban co the mo Tlauncher va choi Minecraft." -ForegroundColor Green
+                Write-Host "Branch 1 done! You can open Tlauncher and play Minecraft." -ForegroundColor Green
             }
 
         } catch {
@@ -211,8 +212,8 @@ while ($true) {
         # Ask user about log
         Write-Host ""
         Write-Host "Log saved: $logFile" -ForegroundColor Cyan
-        Write-Host "1. Giu lai log" -ForegroundColor Yellow
-        Write-Host "2. Xoa toan bo (temp files + log)" -ForegroundColor Yellow
+        Write-Host "1. Keep log" -ForegroundColor Yellow
+        Write-Host "2. Delete all (temp files + log)" -ForegroundColor Yellow
         $cleanChoice = Read-Host "Select option"
 
         if ($cleanChoice -eq "2") {
@@ -231,6 +232,8 @@ while ($true) {
                 }
             }
             if (Test-Path $logFile) {
+                try { Stop-Transcript } catch {}
+                $transcriptStopped = $true
                 Remove-Item $logFile -Force
                 Write-Host "Deleted all temp files and log." -ForegroundColor Green
             }
@@ -246,36 +249,36 @@ while ($true) {
         # Check nothing.enc exists before running Decode.py
         $nothingEnc = Join-Path $repoRoot "TL2\nothing.enc"
         if (-not (Test-Path $nothingEnc)) {
-            Write-Host "Loi: Khong tim thay nothing.enc tai $nothingEnc" -ForegroundColor Red
+            Write-Host "Error: nothing.enc not found at $nothingEnc" -ForegroundColor Red
             continue
         }
 
         # Run Decode.py
         $decodePs1 = Join-Path $repoRoot "TL2\Decode.py"
-        Write-Host "Dang giai ma..." -ForegroundColor Cyan
+        Write-Host "Decrypting..." -ForegroundColor Cyan
         & $pythonExe $decodePs1
         if ($LASTEXITCODE -ne 0) {
-            Write-Host "Giai ma that bai!" -ForegroundColor Red
+            Write-Host "Decryption failed!" -ForegroundColor Red
         } else {
-            Write-Host "Giai ma thanh cong!" -ForegroundColor Green
+            Write-Host "Decryption successful!" -ForegroundColor Green
 
             # Run Shield.py
             $shieldPs1 = Join-Path $repoRoot "TL2\Shield.py"
-            Write-Host "Dang gui ma xac thuc..." -ForegroundColor Cyan
+            Write-Host "Sending auth code..." -ForegroundColor Cyan
             & $pythonExe $shieldPs1
             if ($LASTEXITCODE -ne 0) {
-                Write-Host "Gui ma that bai!" -ForegroundColor Red
+                Write-Host "Auth send failed!" -ForegroundColor Red
             } else {
-                Write-Host "Da gui ma xac thuc!" -ForegroundColor Green
+                Write-Host "Auth sent!" -ForegroundColor Green
 
                 # Run Menu2.py
                 $menu2Ps1 = Join-Path $repoRoot "TL2\Menu2.py"
-                Write-Host "Dang mo Menu2..." -ForegroundColor Cyan
+                Write-Host "Opening Menu2..." -ForegroundColor Cyan
                 & $pythonExe $menu2Ps1
                 if ($LASTEXITCODE -ne 0) {
-                    Write-Host "Menu2 that bai!" -ForegroundColor Red
+                    Write-Host "Menu2 failed!" -ForegroundColor Red
                 } else {
-                    Write-Host "Menu2 da mo!" -ForegroundColor Green
+                    Write-Host "Menu2 opened!" -ForegroundColor Green
                 }
             }
         }

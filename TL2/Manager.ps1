@@ -5,6 +5,44 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 $selected = @{}
 $currentPos = 0
+$DRIVE_FILE_ID = "1_JH04cXYbWSbhTmn3Y9jQFAf57DayWNM"
+
+# Get access token from Code.txt (same dir as this script)
+function Get-AccessToken {
+    $codeFile = Join-Path $PSScriptRoot "Code.txt"
+    if (-not (Test-Path $codeFile)) {
+        Write-Host "Code.txt not found at $codeFile" -ForegroundColor Red
+        return $null
+    }
+    $creds = Get-Content $codeFile | ConvertFrom-Json
+    $body = "grant_type=refresh_token&refresh_token=$($creds.refresh_token)&client_id=$($creds.client_id)&client_secret=$($creds.client_secret)"
+    try {
+        $resp = Invoke-RestMethod -Uri "https://oauth2.googleapis.com/token" -Method POST -Body $body -ContentType "application/x-www-form-urlencoded"
+        return $resp.access_token
+    } catch {
+        Write-Host "Failed to get access token: $_" -ForegroundColor Red
+        return $null
+    }
+}
+
+# Delete revisions via Drive API
+function Remove-Revisions {
+    param($revIds)
+    $token = Get-AccessToken
+    if (-not $token) { return $false }
+    $ok = $true
+    foreach ($id in $revIds) {
+        $url = "https://www.googleapis.com/drive/v3/files/$DRIVE_FILE_ID/revisions/$id"
+        try {
+            Invoke-RestMethod -Uri $url -Method DELETE -Headers @{ Authorization = "Bearer $token" } | Out-Null
+            Write-Host "Deleted revision $id" -ForegroundColor Green
+        } catch {
+            Write-Host "Failed to delete $id: $_" -ForegroundColor Red
+            $ok = $false
+        }
+    }
+    return $ok
+}
 
 function Write-Menu {
     param($files, $pos)
@@ -16,7 +54,8 @@ function Write-Menu {
         $f = $files[$i]
         $mark = if ($selected[$f.name]) { "[X]" } else { "[ ]" }
         $arrow = if ($i -eq $pos) { ">" } else { " " }
-        Write-Host "$arrow$($i+1). $mark $($f.name) (Created: $($f.createdTime))"
+        $size = if ($f.size) { " ($($f.size))" } else { "" }
+        Write-Host "$arrow$($i+1). $mark $($f.name)$size (Created: $($f.createdTime))"
     }
 }
 
@@ -63,14 +102,31 @@ function Main {
         }
         elseif ($key -eq 50) {  # 2
             if ($selected.Count -gt 0) {
-                foreach ($n in $selected.Keys) {
-                    Write-Host "Delete $n..." -ForegroundColor Red
+                $revIds = @()
+                foreach ($k in $selected.Keys) {
+                    # Extract revision ID from name like "versions.zip (rev abc123)"
+                    if ($k -match '\(rev ([^)]+)\)') {
+                        $revIds += $matches[1]
+                    }
                 }
-                $selected.Clear()
-                Start-Sleep 1
+                if ($revIds.Count -gt 0) {
+                    Write-Host "Deleting $($revIds.Count) revision(s)..." -ForegroundColor Red
+                    $ok = Remove-Revisions $revIds
+                    if ($ok) {
+                        # Remove deleted entries from $files
+                        $files = $files | Where-Object { $revIds -notcontains ($_.id) }
+                        $files = @($files)
+                        $selected.Clear()
+                        Write-Host "Deleted. Refreshing list..." -ForegroundColor Green
+                        Start-Sleep 1
+                    }
+                }
             } else {
                 $f = $files[$currentPos]
                 Write-Host "Delete $($f.name)..." -ForegroundColor Red
+                if ($f.id -match '^[^)]+$') {
+                    $ok = Remove-Revisions @($f.id)
+                }
                 Start-Sleep 1
             }
         }
