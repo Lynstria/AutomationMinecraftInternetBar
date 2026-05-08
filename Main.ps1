@@ -6,9 +6,6 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 $ErrorActionPreference = "Continue"
 $env:PYTHONUNBUFFERED = "1"
 
-# GitHub raw base URL
-$RAW_BASE = "https://raw.githubusercontent.com/Lynstria/AutomationMinecraftInternetBar/main/TL1"
-
 # Download repo.zip + python_embed.zip first
 $repoUrl = "https://github.com/Lynstria/AutomationMinecraftInternetBar/archive/refs/heads/main.zip"
 $repoZip = Join-Path $env:TEMP "repo_main.zip"
