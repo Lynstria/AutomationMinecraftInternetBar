@@ -16,13 +16,12 @@ def load_credentials():
         return json.load(f)
 
 def format_time(iso_str):
-    """Convert '2026-05-08T10:30:00.000Z' to 'dd-MM-yyy | HH:mm'."""
+    """Convert '2026-05-08T10:30:00.000Z' to 'HH:mm-dd-MM_YYYY'."""
     try:
         dt = datetime.strptime(iso_str, '%Y-%m-%dT%H:%M:%S.%fZ')
-        return dt.strftime('%d-%m-%Y | %H:%M')
+        return dt.strftime('%H:%M-%d-%m_%Y')
     except:
         return iso_str
-
 def list_drive_revisions(creds):
     """List revisions of a Drive file, sorted newest first."""
     try:
