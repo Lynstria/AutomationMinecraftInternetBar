@@ -232,19 +232,22 @@ def run_downloads(dest_dir=None):
     ]
 
     idx = 0
+    total = len(files)
     for name, display_name, func in files:
         idx += 1
-        print(f"[{idx}/3] Downloading {display_name}...")
+        print(f"[{idx}/{total}] Downloading {display_name}...")
         logger.info("Downloading %s...", name)
         path = func(dest_dir)
         if path:
-            size = os.path.getsize(path)
-            print(f"  {display_name} OK ({size} bytes)")
-            logger.info("%s OK: %s (%d bytes)", name, path, size)
+            logger.info("%s OK: %s", name, path)
             results[name] = path
         else:
             print(f"  {display_name} FAILED!")
             logger.error("%s FAILED", name)
+
+        # Delay 2s between files for network stability
+        if idx < total:
+            time.sleep(2)
 
     # Write download dir path to mc_path.txt
     mc_path_file = os.path.join(os.environ.get("TEMP", "C:\\Temp"), "mc_path.txt")

@@ -31,10 +31,12 @@ function Get-WebFile {
 }
 
 function Invoke-PythonScript {
-    param($pythonDir, $scriptName)
+    param($pythonDir, $scriptName, $scriptPath)
 
     $pythonExe = Join-Path $pythonDir "python.exe"
-    $scriptPath = Join-Path $pythonDir $scriptName
+    if (-not $scriptPath) {
+        $scriptPath = Join-Path $pythonDir $scriptName
+    }
 
     if (-not (Test-Path $scriptPath)) {
         Write-Host "Script not found: $scriptPath" -ForegroundColor Red
@@ -148,29 +150,9 @@ while ($true) {
 
     if ($choice -eq "1") {
         try {
-            # Download .py files to python_embed dir
-            $pyFiles = @("Download.py", "Exec.py", "CustomCore.py", "minecraft_tlauncher_java_config.json")
-            $total = $pyFiles.Count
-            $count = 0
-            foreach ($file in $pyFiles) {
-                $count++
-                Write-Host "[$count/$total] Downloading $file..." -ForegroundColor Cyan
-                $url = "$RAW_BASE/$file"
-                $dest = Join-Path $embedDir $file
-                try {
-                    Invoke-WebRequest -Uri $url -OutFile $dest -Headers $headers -TimeoutSec 60
-                } catch {
-                    Write-Host "  Warning: Failed to download $file from GitHub: $_" -ForegroundColor Yellow
-                    $localFile = Join-Path $PSScriptRoot "TL1\$file"
-                    if (Test-Path $localFile) {
-                        Copy-Item $localFile $dest -Force
-                        Write-Host "  Used local copy of $file" -ForegroundColor Green
-                    }
-                }
-            }
-
-            # Run Download.py
-            $ok = Invoke-PythonScript -pythonDir $embedDir -scriptName "Download.py"
+            # Run Download.py from repo dir (no need to re-download .py files)
+            $tl1Dir = Join-Path $repoDir "TL1"
+            $ok = Invoke-PythonScript -pythonDir $embedDir -scriptPath (Join-Path $tl1Dir "Download.py")
             if (-not $ok) {
                 Write-Host "Download.py FAILED!" -ForegroundColor Red
                 $hasError = $true
@@ -178,7 +160,7 @@ while ($true) {
 
             # Run Exec.py (only if Download.py succeeded)
             if (-not $hasError) {
-                $ok = Invoke-PythonScript -pythonDir $embedDir -scriptName "Exec.py"
+                $ok = Invoke-PythonScript -pythonDir $embedDir -scriptPath (Join-Path $tl1Dir "Exec.py")
                 if (-not $ok) {
                     Write-Host "Exec.py FAILED!" -ForegroundColor Red
                     $hasError = $true
@@ -187,7 +169,7 @@ while ($true) {
 
             # Run CustomCore.py (only if Exec.py succeeded)
             if (-not $hasError) {
-                $ok = Invoke-PythonScript -pythonDir $embedDir -scriptName "CustomCore.py"
+                $ok = Invoke-PythonScript -pythonDir $embedDir -scriptPath (Join-Path $tl1Dir "CustomCore.py")
                 if (-not $ok) {
                     Write-Host "CustomCore.py FAILED!" -ForegroundColor Red
                     $hasError = $true
