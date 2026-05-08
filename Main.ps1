@@ -1,4 +1,4 @@
-# Main.ps1 - Automation Minecraft Internet Bar
+﻿# Main.ps1 - Automation Minecraft Internet Bar
 # Pipeline: Download repo.zip -> python_embed -> TL1/TL2
 
 $ErrorActionPreference = "Continue"
@@ -12,6 +12,77 @@ $repoZip = Join-Path $env:TEMP "repo_main.zip"
 $repoDir = Join-Path $env:TEMP "AutomationMinecraftInternetBar-main"
 
 $headers = @{ "User-Agent" = "Mozilla/5.0" }
+
+# Helper: Text progress bar
+function Show-Progress {
+    param($percent, $activity)
+    $width = 40
+    $filled = [math]::Floor($width * $percent / 100)
+    if ($filled -lt 0) { $filled = 0 }
+    if ($filled -gt $width) { $filled = $width }
+    $empty = $width - $filled
+    $bar = "[" + ("=" * $filled) + ">" + (" " * ($empty - 1)) + "]"
+    Write-Host "`r$activity $bar $percent%" -NoNewline
+    if ($percent -ge 100) { Write-Host "" }
+}
+
+# Helper: Download with text progress (WebClient for real progress)
+function Get-WebFile {
+    param($url, $outFile, $activity)
+    $global:dlPercent = 0
+    $webClient = New-Object System.Net.WebClient
+    Register-ObjectEvent $webClient DownloadProgressChanged -Action {
+        $global:dlPercent = $eventArgs.ProgressPercentage
+        Show-Progress $global:dlPercent $activity
+    } | Out-Null
+    Write-Host "$activity..." -NoNewline
+    $webClient.DownloadFile($url, $outFile)
+    Unregister-Event -SourceIdentifier $webClient.DownloadProgressChanged
+    Show-Progress 100 $activity
+    Write-Host ""
+    $webClient.Dispose()
+}
+
+function Invoke-PythonScript {
+    param($pythonDir, $scriptName)
+
+    $pythonExe = Join-Path $pythonDir "python.exe"
+    $scriptPath = Join-Path $pythonDir $scriptName
+
+    if (-not (Test-Path $scriptPath)) {
+        Write-Host "Script not found: $scriptPath" -ForegroundColor Red
+        return $false
+    }
+
+    $stdoutFile = Join-Path $env:TEMP "python_stdout.txt"
+    $stderrFile = Join-Path $env:TEMP "python_stderr.txt"
+
+    $prevErrorPref = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+
+    & $pythonExe $scriptPath > $stdoutFile 2> $stderrFile
+    $exitCode = $LASTEXITCODE
+
+    $ErrorActionPreference = $prevErrorPref
+
+    if (Test-Path $stdoutFile) {
+        $stdout = Get-Content $stdoutFile -Raw
+        if ($stdout) { Write-Host $stdout }
+        Remove-Item $stdoutFile -Force -ErrorAction SilentlyContinue
+    }
+    if (Test-Path $stderrFile) {
+        $stderr = Get-Content $stderrFile -Raw
+        if ($stderr) { Write-Host "STDERR: $stderr" -ForegroundColor Yellow }
+        Remove-Item $stderrFile -Force -ErrorAction SilentlyContinue
+    }
+
+    if ($exitCode -ne 0) {
+        Write-Host "$scriptName exited with code $exitCode" -ForegroundColor Red
+        return $false
+    }
+    return $true
+}
+
 try {
     Get-WebFile -url $repoUrl -outFile $repoZip -activity "Dang tai repo"
     if (Test-Path $repoDir) {
@@ -223,73 +294,3 @@ if ($choice -eq "1") {
 
 Stop-Transcript
 
-# Helper: Text progress bar
-function Show-Progress {
-    param($percent, $activity)
-    $width = 40
-    $filled = [math]::Floor($width * $percent / 100)
-    if ($filled -lt 0) { $filled = 0 }
-    if ($filled -gt $width) { $filled = $width }
-    $empty = $width - $filled
-    $bar = "[" + ("=" * $filled) + ">" + (" " * ($empty - 1)) + "]"
-    Write-Host "`r$activity $bar $percent%" -NoNewline
-    if ($percent -ge 100) { Write-Host "" }
-}
-
-# Helper: Download with text progress (WebClient for real progress)
-function Get-WebFile {
-    param($url, $outFile, $activity)
-    $global:dlPercent = 0
-    $webClient = New-Object System.Net.WebClient
-    Register-ObjectEvent $webClient DownloadProgressChanged -Action {
-        $global:dlPercent = $eventArgs.ProgressPercentage
-        Show-Progress $global:dlPercent $activity
-    } | Out-Null
-    Write-Host "$activity..." -NoNewline
-    $webClient.DownloadFile($url, $outFile)
-    Unregister-Event -SourceIdentifier $webClient.DownloadProgressChanged
-    Show-Progress 100 $activity
-    Write-Host ""
-    $webClient.Dispose()
-}
-
-# Function definitions at the end
-function Invoke-PythonScript {
-    param($pythonDir, $scriptName)
-
-    $pythonExe = Join-Path $pythonDir "python.exe"
-    $scriptPath = Join-Path $pythonDir $scriptName
-
-    if (-not (Test-Path $scriptPath)) {
-        Write-Host "Script not found: $scriptPath" -ForegroundColor Red
-        return $false
-    }
-
-    $stdoutFile = Join-Path $env:TEMP "python_stdout.txt"
-    $stderrFile = Join-Path $env:TEMP "python_stderr.txt"
-
-    $prevErrorPref = $ErrorActionPreference
-    $ErrorActionPreference = "Continue"
-
-    & $pythonExe $scriptPath > $stdoutFile 2> $stderrFile
-    $exitCode = $LASTEXITCODE
-
-    $ErrorActionPreference = $prevErrorPref
-
-    if (Test-Path $stdoutFile) {
-        $stdout = Get-Content $stdoutFile -Raw
-        if ($stdout) { Write-Host $stdout }
-        Remove-Item $stdoutFile -Force -ErrorAction SilentlyContinue
-    }
-    if (Test-Path $stderrFile) {
-        $stderr = Get-Content $stderrFile -Raw
-        if ($stderr) { Write-Host "STDERR: $stderr" -ForegroundColor Yellow }
-        Remove-Item $stderrFile -Force -ErrorAction SilentlyContinue
-    }
-
-    if ($exitCode -ne 0) {
-        Write-Host "$scriptName exited with code $exitCode" -ForegroundColor Red
-        return $false
-    }
-    return $true
-}
