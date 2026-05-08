@@ -36,7 +36,7 @@ def main():
                 print("Manager thất bại")
         elif choice == '3':
             print("Thoát về menu chính...")
-            sys.exit(0)
+            return
         else:
             print("Chọn 1-3")
 

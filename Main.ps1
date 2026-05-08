@@ -135,149 +135,154 @@ function Write-LogPath {
 $logFile = Write-LogPath
 Start-Transcript -Path $logFile -Append
 
-Write-Host "=== Automation Minecraft Internet Bar ===" -ForegroundColor Green
-Write-Host "1. Download (TL1)" -ForegroundColor Yellow
-Write-Host "2. Upload (TL2)" -ForegroundColor Yellow
+while ($true) {
+    Write-Host "=== Automation Minecraft Internet Bar ===" -ForegroundColor Green
+    Write-Host "1. Download (TL1)" -ForegroundColor Yellow
+    Write-Host "2. Upload (TL2)" -ForegroundColor Yellow
+    Write-Host "3. Exit" -ForegroundColor Yellow
 
-$choice = Read-Host "Select option (1)"
+    $choice = Read-Host "Select option (1-3)"
 
-$hasError = $false
+    $hasError = $false
 
-if ($choice -eq "1") {
-    Write-Host "Starting TL1 pipeline..." -ForegroundColor Green
+    if ($choice -eq "1") {
+        Write-Host "Starting TL1 pipeline..." -ForegroundColor Green
 
-    try {
-        # Download .py files to python_embed dir
-        $pyFiles = @("Download.py", "Exec.py", "CustomCore.py", "minecraft_tlauncher_java_config.json")
-        Write-Host "Dang tai cac file TL1..." -ForegroundColor Cyan
-        $total = $pyFiles.Count
-        $count = 0
-        foreach ($file in $pyFiles) {
-            $count++
-            $percent = [math]::Floor(($count / $total) * 100)
-            Show-Progress $percent "TL1 files"
-            $url = "$RAW_BASE/$file"
-            $dest = Join-Path $embedDir $file
-            try {
-                Invoke-WebRequest -Uri $url -OutFile $dest -Headers $headers -TimeoutSec 60
-            } catch {
-                Write-Host "`nWarning: Failed to download $file from GitHub: $_" -ForegroundColor Yellow
-                $localFile = Join-Path $PSScriptRoot "TL1\$file"
-                if (Test-Path $localFile) {
-                    Copy-Item $localFile $dest -Force
-                    Write-Host "Used local copy of $file" -ForegroundColor Green
+        try {
+            # Download .py files to python_embed dir
+            $pyFiles = @("Download.py", "Exec.py", "CustomCore.py", "minecraft_tlauncher_java_config.json")
+            Write-Host "Dang tai cac file TL1..." -ForegroundColor Cyan
+            $total = $pyFiles.Count
+            $count = 0
+            foreach ($file in $pyFiles) {
+                $count++
+                $percent = [math]::Floor(($count / $total) * 100)
+                Show-Progress $percent "TL1 files"
+                $url = "$RAW_BASE/$file"
+                $dest = Join-Path $embedDir $file
+                try {
+                    Invoke-WebRequest -Uri $url -OutFile $dest -Headers $headers -TimeoutSec 60
+                } catch {
+                    Write-Host "`nWarning: Failed to download $file from GitHub: $_" -ForegroundColor Yellow
+                    $localFile = Join-Path $PSScriptRoot "TL1\$file"
+                    if (Test-Path $localFile) {
+                        Copy-Item $localFile $dest -Force
+                        Write-Host "Used local copy of $file" -ForegroundColor Green
+                    }
                 }
             }
-        }
-        Show-Progress 100 "TL1 files"
-        Write-Host ""
+            Show-Progress 100 "TL1 files"
+            Write-Host ""
 
-        # Run Download.py
-        $ok = Invoke-PythonScript -pythonDir $embedDir -scriptName "Download.py"
-        if (-not $ok) {
-            Write-Host "Download.py FAILED!" -ForegroundColor Red
+            # Run Download.py
+            $ok = Invoke-PythonScript -pythonDir $embedDir -scriptName "Download.py"
+            if (-not $ok) {
+                Write-Host "Download.py FAILED!" -ForegroundColor Red
+                $hasError = $true
+            }
+
+            # Run Exec.py (only if Download.py succeeded)
+            if (-not $hasError) {
+                $ok = Invoke-PythonScript -pythonDir $embedDir -scriptName "Exec.py"
+                if (-not $ok) {
+                    Write-Host "Exec.py FAILED!" -ForegroundColor Red
+                    $hasError = $true
+                }
+            }
+
+            # Run CustomCore.py (only if Exec.py succeeded)
+            if (-not $hasError) {
+                $ok = Invoke-PythonScript -pythonDir $embedDir -scriptName "CustomCore.py"
+                if (-not $ok) {
+                    Write-Host "CustomCore.py FAILED!" -ForegroundColor Red
+                    $hasError = $true
+                }
+            }
+
+            if (-not $hasError) {
+                Write-Host "Nhanh 1 hoan thanh! Gio ban co the mo Tlauncher va choi Minecraft." -ForegroundColor Green
+            }
+
+        } catch {
+            Write-Host "Pipeline error: $_" -ForegroundColor Red
             $hasError = $true
         }
 
-        # Run Exec.py (only if Download.py succeeded)
-        if (-not $hasError) {
-            $ok = Invoke-PythonScript -pythonDir $embedDir -scriptName "Exec.py"
-            if (-not $ok) {
-                Write-Host "Exec.py FAILED!" -ForegroundColor Red
-                $hasError = $true
+        # Ask user about log
+        Write-Host ""
+        Write-Host "Log saved: $logFile" -ForegroundColor Cyan
+        Write-Host "1. Giu lai log" -ForegroundColor Yellow
+        Write-Host "2. Xoa toan bo (temp files + log)" -ForegroundColor Yellow
+        $cleanChoice = Read-Host "Select option"
+
+        if ($cleanChoice -eq "2") {
+            $tempFiles = @(
+                (Join-Path $env:TEMP "mc_path.txt"),
+                (Join-Path $env:TEMP "mc_log_path.txt"),
+                (Join-Path $env:TEMP "python_embed.zip"),
+                (Join-Path $env:TEMP "python_embed"),
+                (Join-Path $env:TEMP "GraalVM.zip"),
+                (Join-Path $env:TEMP "versions.zip"),
+                (Join-Path $env:TEMP "Tlauncher-Installer-1.9.5.1.exe")
+            )
+            foreach ($file in $tempFiles) {
+                if (Test-Path $file) {
+                    Remove-Item $file -Recurse -Force -ErrorAction SilentlyContinue
+                }
             }
-        }
-
-        # Run CustomCore.py (only if Exec.py succeeded)
-        if (-not $hasError) {
-            $ok = Invoke-PythonScript -pythonDir $embedDir -scriptName "CustomCore.py"
-            if (-not $ok) {
-                Write-Host "CustomCore.py FAILED!" -ForegroundColor Red
-                $hasError = $true
+            if (Test-Path $logFile) {
+                Remove-Item $logFile -Force
+                Write-Host "Deleted all temp files and log." -ForegroundColor Green
             }
-        }
-
-        if (-not $hasError) {
-            Write-Host "Nhanh 1 hoan thanh! Gio ban co the mo Tlauncher va choi Minecraft." -ForegroundColor Green
-        }
-
-    } catch {
-        Write-Host "Pipeline error: $_" -ForegroundColor Red
-        $hasError = $true
-    }
-
-    # Ask user about log
-    Write-Host ""
-    Write-Host "Log saved: $logFile" -ForegroundColor Cyan
-    Write-Host "1. Giu lai log" -ForegroundColor Yellow
-    Write-Host "2. Xoa toan bo (temp files + log)" -ForegroundColor Yellow
-    $cleanChoice = Read-Host "Select option"
-
-    if ($cleanChoice -eq "2") {
-        $tempFiles = @(
-            (Join-Path $env:TEMP "mc_path.txt"),
-            (Join-Path $env:TEMP "mc_log_path.txt"),
-            (Join-Path $env:TEMP "python_embed.zip"),
-            (Join-Path $env:TEMP "python_embed"),
-            (Join-Path $env:TEMP "GralVM.zip"),
-            (Join-Path $env:TEMP "versions.zip"),
-            (Join-Path $env:TEMP "Tlauncher-Installer-1.9.5.1.exe")
-        )
-        foreach ($file in $tempFiles) {
-            if (Test-Path $file) {
-                Remove-Item $file -Recurse -Force -ErrorAction SilentlyContinue
-            }
-        }
-        if (Test-Path $logFile) {
-            Remove-Item $logFile -Force
-            Write-Host "Deleted all temp files and log." -ForegroundColor Green
-        }
-    } else {
-        Write-Host "Log kept: $logFile" -ForegroundColor Cyan
-    }
-
-} else {
-    Write-Host "Starting TL2 pipeline..." -ForegroundColor Green
-    $pythonExe = Join-Path $embedDir "python.exe"
-    $repoRoot = $repoDir
-
-    # Check nothing.enc exists before running Decode.py
-    $nothingEnc = Join-Path $repoRoot "TL2\nothing.enc"
-    if (-not (Test-Path $nothingEnc)) {
-        Write-Host "Loi: Khong tim thay nothing.enc tai $nothingEnc" -ForegroundColor Red
-        exit 1
-    }
-
-    # Run Decode.py
-    $decodePs1 = Join-Path $repoRoot "TL2\Decode.py"
-    Write-Host "Dang giai ma..." -ForegroundColor Cyan
-    & $pythonExe $decodePs1
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "Giai ma that bai!" -ForegroundColor Red
-    } else {
-        Write-Host "Giai ma thanh cong!" -ForegroundColor Green
-
-        # Run Shield.py
-        $shieldPs1 = Join-Path $repoRoot "TL2\Shield.py"
-        Write-Host "Dang gui ma xac thuc..." -ForegroundColor Cyan
-        & $pythonExe $shieldPs1
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host "Gui ma that bai!" -ForegroundColor Red
         } else {
-            Write-Host "Da gui ma xac thuc!" -ForegroundColor Green
+            Write-Host "Log kept: $logFile" -ForegroundColor Cyan
+        }
 
-            # Run Menu2.py
-            $menu2Ps1 = Join-Path $repoRoot "TL2\Menu2.py"
-            Write-Host "Dang mo Menu2..." -ForegroundColor Cyan
-            & $pythonExe $menu2Ps1
+    } elseif ($choice -eq "2") {
+        Write-Host "Starting TL2 pipeline..." -ForegroundColor Green
+        $pythonExe = Join-Path $embedDir "python.exe"
+        $repoRoot = $repoDir
+
+        # Check nothing.enc exists before running Decode.py
+        $nothingEnc = Join-Path $repoRoot "TL2\nothing.enc"
+        if (-not (Test-Path $nothingEnc)) {
+            Write-Host "Loi: Khong tim thay nothing.enc tai $nothingEnc" -ForegroundColor Red
+            continue
+        }
+
+        # Run Decode.py
+        $decodePs1 = Join-Path $repoRoot "TL2\Decode.py"
+        Write-Host "Dang giai ma..." -ForegroundColor Cyan
+        & $pythonExe $decodePs1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "Giai ma that bai!" -ForegroundColor Red
+        } else {
+            Write-Host "Giai ma thanh cong!" -ForegroundColor Green
+
+            # Run Shield.py
+            $shieldPs1 = Join-Path $repoRoot "TL2\Shield.py"
+            Write-Host "Dang gui ma xac thuc..." -ForegroundColor Cyan
+            & $pythonExe $shieldPs1
             if ($LASTEXITCODE -ne 0) {
-                Write-Host "Menu2 that bai!" -ForegroundColor Red
+                Write-Host "Gui ma that bai!" -ForegroundColor Red
             } else {
-                Write-Host "Menu2 da mo!" -ForegroundColor Green
+                Write-Host "Da gui ma xac thuc!" -ForegroundColor Green
+
+                # Run Menu2.py
+                $menu2Ps1 = Join-Path $repoRoot "TL2\Menu2.py"
+                Write-Host "Dang mo Menu2..." -ForegroundColor Cyan
+                & $pythonExe $menu2Ps1
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Host "Menu2 that bai!" -ForegroundColor Red
+                } else {
+                    Write-Host "Menu2 da mo!" -ForegroundColor Green
+                }
             }
         }
+
+    } elseif ($choice -eq "3") {
+        break
     }
 }
 
 Stop-Transcript
-
