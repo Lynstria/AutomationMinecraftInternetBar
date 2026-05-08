@@ -288,4 +288,4 @@ while ($true) {
     }
 }
 
-Stop-Transcript
+if (-not $transcriptStopped) { Stop-Transcript }
