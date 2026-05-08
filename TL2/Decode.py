@@ -22,9 +22,9 @@ def decrypt_nothing_enc(password):
         return None
 
 def test_discord_api(url):
-    """Test Discord webhook URL via HEAD request."""
+    """Test Discord webhook URL via GET request."""
     try:
-        req = urllib.request.Request(url, method='HEAD')
+        req = urllib.request.Request(url, method='GET', headers={'User-Agent': 'Mozilla/5.0'})
         resp = urllib.request.urlopen(req, timeout=5)
         return 200 <= resp.status < 400
     except Exception:

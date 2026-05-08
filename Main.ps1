@@ -13,34 +13,19 @@ $repoDir = Join-Path $env:TEMP "AutomationMinecraftInternetBar-main"
 
 $headers = @{ "User-Agent" = "Mozilla/5.0" }
 
-# Helper: Text progress bar
-function Show-Progress {
-    param($percent, $activity)
-    $width = 40
-    $filled = [math]::Floor($width * $percent / 100)
-    if ($filled -lt 0) { $filled = 0 }
-    if ($filled -gt $width) { $filled = $width }
-    $empty = $width - $filled
-    $bar = "[" + ("=" * $filled) + ">" + (" " * ($empty - 1)) + "]"
-    Write-Host "`r$activity $bar $percent%" -NoNewline
-    if ($percent -ge 100) { Write-Host "" }
-}
-
-# Helper: Download with text progress (WebClient for real progress)
+# Helper: Download file with progress
 function Get-WebFile {
     param($url, $outFile, $activity)
-    $global:dlPercent = 0
-    $webClient = New-Object System.Net.WebClient
-    Register-ObjectEvent $webClient DownloadProgressChanged -Action {
-        $global:dlPercent = $eventArgs.ProgressPercentage
-        Show-Progress $global:dlPercent $activity
-    } | Out-Null
     Write-Host "$activity..." -NoNewline
-    $webClient.DownloadFile($url, $outFile)
-    Unregister-Event -SourceIdentifier $webClient.DownloadProgressChanged
-    Show-Progress 100 $activity
-    Write-Host ""
-    $webClient.Dispose()
+    try {
+        Invoke-WebRequest -Uri $url -OutFile $outFile -Headers $global:headers -TimeoutSec 300
+        Write-Host " 100%" -NoNewline
+    } catch {
+        Write-Host " FAILED" -NoNewline
+        throw
+    } finally {
+        Write-Host ""
+    }
 }
 
 function Invoke-PythonScript {
