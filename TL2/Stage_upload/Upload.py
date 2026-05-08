@@ -31,7 +31,15 @@ def zip_versions():
                 zf.write(fp, arcname)
     size = os.path.getsize(zip_path)
     print("Nen xong: {} ({} bytes)".format(zip_path, size))
-    return zip_path
+    # Rename to dated version
+    date_str = datetime.datetime.now().strftime("%d-%m-%Y")
+    new_name = "versions-{}.zip".format(date_str)
+    new_path = os.path.join(MINECRAFT_DIR, new_name)
+    if os.path.exists(new_path):
+        os.remove(new_path)
+    os.rename(zip_path, new_path)
+    print("Doi ten thanh: {}".format(new_path))
+    return new_path
 
 def upload_to_drive(zip_path, creds):
     try:
