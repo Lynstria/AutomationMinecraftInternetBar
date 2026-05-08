@@ -1,4 +1,4 @@
-# Automation Minecraft Internet Bar (v2.6)
+# Automation Minecraft Internet Bar (v2.8 - Stable)
 
 Dự án cá nhân, tự động hóa cài đặt Minecraft (TL1) + Upload versions lên Drive (TL2).
 
@@ -20,8 +20,8 @@ Main.ps1 -> Decode.py -> Shield.py -> Menu2.py -> Upload.py / Manager.ps1
 
 ## TL1: Tải & Cài đặt
 
-1. **Main.ps1** - Menu chọn, tải Python embed, gọi tuần tự các script Python
-2. **Download.py** - Tải TLauncher.exe + GraalVM.zip + versions.zip (thử lại 3 lần, hỗ trợ Drive)
+1. **Main.ps1** - Menu chọn, tải Python embed, gọi tuần tự các script Python, cache repo check
+2. **Download.py** - Tải TLauncher.exe + GraalVM.zip + versions.zip (thử lại 3 lần, hỗ trợ Drive, stdlib only)
 3. **Exec.py** - Chạy TLauncher installer (HITL), giải nén GraalVM -> C:\Java\, cài versions vào .minecraft\
 4. **CustomCore.py** - Ghi cấu hình java vào .tlauncher\
 
@@ -31,7 +31,7 @@ Main.ps1 -> Decode.py -> Shield.py -> Menu2.py -> Upload.py / Manager.ps1
 2. **Shield.py** - Xác thực mã 4 số Discord
 3. **Menu2.py** - Menu: Upload / Manager
 4. **Upload.py** - Nén `.minecraft\versions\` thành `.minecraft\versions-YYYY-MM-DD.zip`, upload Drive (timeout 300s)
-5. **Manager.ps1** - UI tương tác: di chuyển mũi tên, space chọn/bỏ chọn, output UTF-8
+5. **Manager.ps1** - UI tương tác: di chuyển mũi tên, space chọn/bỏ chọn, xóa revisions, output UTF-8
 
 ## Cách dùng
 
@@ -50,9 +50,9 @@ Chọn **1** cho TL1, **2** cho TL2.
 
 ```
 AutomationMinecraftInternetBar/
-├── Main.ps1                        # Điểm vào (PowerShell, UTF-8)
+├── Main.ps1                        # Điểm vào (PowerShell, UTF-8, cache check)
 ├── TL1/
-│   ├── Download.py                  # Tải 3 file (chỉ stdlib, UTF-8)
+│   ├── Download.py                  # Tải 3 file (stdlib only, UTF-8, no logger)
 │   ├── Exec.py                     # Cài TLauncher + thiết lập Java
 │   ├── CustomCore.py               # Ghi cấu hình java
 │   └── minecraft_tlauncher_java_config.json
@@ -66,38 +66,41 @@ AutomationMinecraftInternetBar/
 │   │   └── Manager.py           # Liệt kê file Drive -> JSON (UTF-8)
 │   └── lib_pure/
 │       └── aes_pure.py            # AES256 thuần Python (UTF-8)
-└── docs/
-    ├── planning-session-2026-05-05.md
-    └── issues/
 ```
 
 ## Yêu cầu
 
 - Windows 10/11
 - PowerShell 5.1+ (hỗ trợ UTF-8)
+- Alacritty terminal (khuyên dùng)
 - Internet (tải TLauncher, GraalVM, versions)
 - Quyền cài đặt (TLauncher installer cần admin nếu UAC bật)
 
 ## Công nghệ sử dụng
 
-- **PowerShell** - Điều phối, menu, ghi log (output UTF-8)
+- **PowerShell** - Điều phối, menu, Python stdout realtime (Process+ReadLine)
 - **Python 3.11.9 embed** - Chạy script (chỉ stdlib, không pip, UTF-8)
 - **AES256** - Giải mã thuần Python (không thư viện ngoài)
 - **Google Drive API** - Upload versions qua refresh_token
 
-## Xử lý lỗi
+## Xử lý lỗi & Tính năng
 
 - Thử lại 3 lần cho mỗi file tải (Download.py)
+- **Repo cache:** Skip download nếu essential files đã tồn tại
+- **Python stdout:** Process+ReadLine polling, PYTHONUNBUFFERED=1
+- **Manager.ps1:** Fix variable reference `${id}:` và `$_`
 - Dự phòng: Nếu GitHub raw 404 -> copy file local
 - File tạm: `%TEMP%\python_embed\`, tùy chọn dọn dẹp trong menu
-- Timeout upload: 60s -> 300s (sửa 2026-05-08)
+- Timeout upload: 300s (sửa 2026-05-08)
+- Keep/Delete: Giữ temp files hoặc xóa tất cả (bao gồm repo)
 
-## Trạng thái
+## Trạng thái (v2.8 - Stable)
 
-- [x] TL1: Tải + Cài đặt + Thiết lập Java (hoàn thành 2026-05-06)
-- [x] TL2: Upload versions lên Drive (hoàn thành 2026-05-08)
-- [x] Manager.ps1: UTF-8 + điều hướng mũi tên + space toggle (sửa 2026-05-08)
-- [x] Upload.py: Nén trực tiếp .minecraft + log upload (sửa 2026-05-08)
+- [x] TL1: Tải + Cài đặt + Thiết lập Java (ổn định)
+- [x] TL2: Upload versions lên Drive + Manager (ổn định)
+- [x] Main.ps1: Cache check, Python realtime output (sửa 2026-05-08)
+- [x] Download.py: Xóa logger, chỉ dùng print() (sửa 2026-05-08)
+- [x] Manager.ps1: Fix `${id}:` variable reference (sửa 2026-05-08)
 
 ## Giấy phép
 
