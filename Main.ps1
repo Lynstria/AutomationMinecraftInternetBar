@@ -47,8 +47,9 @@ function Invoke-PythonScript {
     $prevErrorPref = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
 
-    & $pythonExe $scriptPath
-    $exitCode = $LASTEXITCODE
+    # Run Python in same console window to ensure output appears (fix irm|iex stdout issue)
+    $process = Start-Process -FilePath $pythonExe -ArgumentList $scriptPath -NoNewWindow -PassThru -Wait
+    $exitCode = $process.ExitCode
 
     $ErrorActionPreference = $prevErrorPref
 
