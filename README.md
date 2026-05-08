@@ -1,10 +1,12 @@
 # Automation Minecraft Internet Bar (v2.4)
 
-Auto setup Minecraft (TL1) + Upload versions to Drive (TL2) for net cafe.
+Tự động hóa cài đặt Minecraft (TL1) + Upload versions lên Drive (TL2) cho quán net.
 
-## Flow
+Kết hợp logic người dùng với Claude Code, vận dụng và thử nghiệm model code, ngữ cảnh và test AI model + Claude Code.
 
-**TL1 (Player setup):**
+## Luồng hoạt động
+
+**TL1 (Cài đặt cho người chơi):**
 ```
 Main.ps1 -> Python embed -> Download.py -> Exec.py -> CustomCore.py
 ```
@@ -14,87 +16,89 @@ Main.ps1 -> Python embed -> Download.py -> Exec.py -> CustomCore.py
 Main.ps1 -> Decode.py -> Shield.py -> Menu2.py -> Upload.py / Manager.ps1
 ```
 
-## TL1: Download & Setup
+## TL1: Tải & Cài đặt
 
-1. **Main.ps1** - Menu, dl Python embed, call Python scripts
-2. **Download.py** - DL TLauncher.exe + GraalVM.zip + versions.zip (retry 3x, Drive handler)
-3. **Exec.py** - Run TLauncher installer (HITL), extract GraalVM -> C:\Java\, install versions
-4. **CustomCore.py** - Write java config to .tlauncher\
+1. **Main.ps1** - Menu chọn, tải Python embed, gọi tuần tự các script Python
+2. **Download.py** - Tải TLauncher.exe + GraalVM.zip + versions.zip (thử lại 3 lần, hỗ trợ Drive)
+3. **Exec.py** - Chạy TLauncher installer (HITL), giải nén GraalVM -> C:\Java\, cài versions vào .minecraft\
+4. **CustomCore.py** - Ghi cấu hình java vào .tlauncher\
 
-## TL2: Upload & Manage Versions
+## TL2: Upload & Quản lý Versions
 
-1. **Decode.py** - AES256 decrypt nothing.enc -> Code.txt (Drive creds)
-2. **Shield.py** - Discord 4-digit code verification
+1. **Decode.py** - AES256 giải mã nothing.enc -> Code.txt (thông tin xác thực Drive)
+2. **Shield.py** - Xác thực mã 4 số Discord
 3. **Menu2.py** - Menu: Upload / Manager
-4. **Upload.py** - Zip `.minecraft\versions\` to `.minecraft\versions-YYYY-MM-DD.zip`, upload to Drive (300s timeout)
-5. **Manager.ps1** - Interactive UI: arrow nav, space toggle, UTF-8 output
+4. **Upload.py** - Nén `.minecraft\versions\` thành `.minecraft\versions-YYYY-MM-DD.zip`, upload Drive (timeout 300s)
+5. **Manager.ps1** - UI tương tác: di chuyển mũi tên, space chọn/bỏ chọn, output UTF-8
 
-## Quick start
+## Cách dùng
 
-**Run directly (RAM, no clone):**
+**Chạy trực tiếp (RAM, không cần clone):**
 ```powershell
 irm https://raw.githubusercontent.com/Lynstria/AutomationMinecraftInternetBar/main/Main.ps1 | iex
 ```
 
-**Run from repo:**
+**Chạy từ repo:**
 ```powershell
 .\Main.ps1
 ```
-Choose **1** for TL1, **2** for TL2.
+Chọn **1** cho TL1, **2** cho TL2.
 
-## Structure
+## Cấu trúc
 
 ```
 AutomationMinecraftInternetBar/
-├── Main.ps1                        # Entry (PS, UTF-8)
+├── Main.ps1                        # Điểm vào (PowerShell, UTF-8)
 ├── TL1/
-│   ├── Download.py                  # DL 3 files (stdlib only, UTF-8)
-│   ├── Exec.py                     # Install TLauncher + Java
-│   ├── CustomCore.py               # Write java config
+│   ├── Download.py                  # Tải 3 file (chỉ stdlib, UTF-8)
+│   ├── Exec.py                     # Cài TLauncher + thiết lập Java
+│   ├── CustomCore.py               # Ghi cấu hình java
 │   └── minecraft_tlauncher_java_config.json
 ├── TL2/
-│   ├── Decode.py                   # AES decrypt (UTF-8)
-│   ├── Shield.py                   # Discord verify (UTF-8)
-│   ├── Menu2.py                   # TL2 menu (UTF-8)
-│   ├── Manager.ps1                # Drive file manager (UTF-8, arrow nav)
+│   ├── Decode.py                   # Giải mã AES (UTF-8)
+│   ├── Shield.py                   # Xác thực Discord (UTF-8)
+│   ├── Menu2.py                   # Menu TL2 (UTF-8)
+│   ├── Manager.ps1                # Quản lý file Drive (UTF-8, điều hướng mũi tên)
 │   ├── Stage_upload/
-│   │   ├── Upload.py             # Zip + upload (UTF-8, 300s timeout)
-│   │   └── Manager.py           # List Drive files -> JSON (UTF-8)
+│   │   ├── Upload.py             # Nén + upload (UTF-8, timeout 300s)
+│   │   └── Manager.py           # Liệt kê file Drive -> JSON (UTF-8)
 │   └── lib_pure/
-│       └── aes_pure.py            # AES256 pure Python (UTF-8)
+│       └── aes_pure.py            # AES256 thuần Python (UTF-8)
 └── docs/
     ├── planning-session-2026-05-05.md
     └── issues/
 ```
 
-## Requirements
+## Yêu cầu
 
 - Windows 10/11
-- PowerShell 5.1+ (UTF-8 support)
-- Internet (DL TLauncher, GraalVM, versions)
-- Admin for TLauncher installer (UAC)
+- PowerShell 5.1+ (hỗ trợ UTF-8)
+- Internet (tải TLauncher, GraalVM, versions)
+- Quyền cài đặt (TLauncher installer cần admin nếu UAC bật)
 
-## Tech stack
+## Công nghệ sử dụng
 
-- **PowerShell** - Orchestration, menu, logging (UTF-8 output)
-- **Python 3.11.9 embed** - Scripts (stdlib only, no pip, UTF-8)
-- **AES256** - Pure Python decrypt (no external lib)
-- **Google Drive API** - Upload versions via refresh_token
+- **PowerShell** - Điều phối, menu, ghi log (output UTF-8)
+- **Python 3.11.9 embed** - Chạy script (chỉ stdlib, không pip, UTF-8)
+- **AES256** - Giải mã thuần Python (không thư viện ngoài)
+- **Google Drive API** - Upload versions qua refresh_token
 
-## Error handling
+## Xử lý lỗi
 
-- Retry 3x per download (Download.py)
-- Fallback: GitHub raw 404 -> copy local file
-- Temp: `%TEMP%\python_embed\`, cleanup option in menu
-- Upload timeout: 60s -> 300s (fixed 2026-05-08)
+- Thử lại 3 lần cho mỗi file tải (Download.py)
+- Dự phòng: Nếu GitHub raw 404 -> copy file local
+- File tạm: `%TEMP%\python_embed\`, tùy chọn dọn dẹp trong menu
+- Timeout upload: 60s -> 300s (sửa 2026-05-08)
 
-## Status
+## Trạng thái
 
-- [x] TL1: Download + Install + Java setup (done 2026-05-06)
-- [x] TL2: Upload versions to Drive (done 2026-05-08)
-- [x] Manager.ps1: UTF-8 + arrow nav + space toggle (fixed 2026-05-08)
-- [x] Upload.py: Direct zip to .minecraft + upload log (fixed 2026-05-08)
+- [x] TL1: Tải + Cài đặt + Thiết lập Java (hoàn thành 2026-05-06)
+- [x] TL2: Upload versions lên Drive (hoàn thành 2026-05-08)
+- [x] Manager.ps1: UTF-8 + điều hướng mũi tên + space toggle (sửa 2026-05-08)
+- [x] Upload.py: Nén trực tiếp .minecraft + log upload (sửa 2026-05-08)
 
-## License
+## Giấy phép
 
 MIT
+
+❤️ Made by Lynstria – because every millisecond counts.
