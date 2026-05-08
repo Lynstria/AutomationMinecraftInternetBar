@@ -86,26 +86,39 @@ def _download_gdrive(url, dest, timeout=300):
                 pass
         html = html_bytes.decode("utf-8", errors="ignore")
 
-        # Extract confirm token
-        token = None
-        m = re.search(r'name="confirm"[^>]*value="([^"]*)"', html)
-        if m:
-            token = m.group(1)
-        if not token:
-            m = re.search(r'"download_warning"\s*:\s*"([^"]+)"', html)
-            if m:
-                token = m.group(1)
-
-        if not token:
+        # Parse form from virus warning page
+        action, fields = _parse_gdrive_form(html)
+        if not action or "confirm" not in fields:
             return False
 
-        # Retry with confirm token
-        sep = "&" if "?" in url else "?"
-        url2 = url + sep + "confirm=" + token
+        # Build URL from form action + all fields
+        params = "&".join(f"{k}={v}" for k, v in fields.items())
+        url2 = action + "?" + params
         req2 = urllib.request.Request(url2, headers=headers)
         try:
             resp2 = urllib.request.urlopen(req2, timeout=timeout)
-            return _stream_to_file(resp2, dest, timeout)
+            # Check if still HTML (some cases need additional auth)
+            chunk2 = resp2.read(8192)
+            if _is_html(chunk2):
+                return False
+            # Stream remaining data
+            class FakeResp2:
+                def __init__(self, first, resp):
+                    self.first = first
+                    self.resp = resp
+                    self._used = False
+                def read(self, n=-1):
+                    if not self._used:
+                        self._used = True
+                        return self.first
+                    if self.resp:
+                        try:
+                            return self.resp.read(n)
+                        except:
+                            pass
+                    return b""
+            fake2 = FakeResp2(chunk2, resp2)
+            return _stream_to_file(fake2, dest, timeout)
         except Exception:
             return False
 
@@ -126,7 +139,7 @@ def _download_gdrive(url, dest, timeout=300):
                     pass
             return b""
 
-    fake = FakeResp(first_chunk, resp if 'resp' in dir() else None)
+    fake = FakeResp(first_chunk, resp if 'resp' in locals() else None)
     return _stream_to_file(fake, dest, timeout)
 
 
