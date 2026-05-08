@@ -1,6 +1,8 @@
 # Automation Minecraft Internet Bar (v2.4)
 
-Tự động hóa cài đặt Minecraft (TL1) + Upload versions lên Drive (TL2) cho quán net.
+Dự án cá nhân, tự động hóa cài đặt Minecraft (TL1) + Upload versions lên Drive (TL2).
+
+**Không dành cho công khai hay hội nhóm khác.**
 
 Kết hợp logic người dùng với Claude Code, vận dụng và thử nghiệm model code, ngữ cảnh và test AI model + Claude Code.
 
