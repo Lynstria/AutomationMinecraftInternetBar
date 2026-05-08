@@ -1,4 +1,4 @@
-# Automation Minecraft Internet Bar (v2.4)
+# Automation Minecraft Internet Bar (v2.5)
 
 Dự án cá nhân, tự động hóa cài đặt Minecraft (TL1) + Upload versions lên Drive (TL2).
 
