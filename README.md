@@ -1,70 +1,99 @@
-# Automation Minecraft Internet Bar
+# Automation Minecraft Internet Bar (v2.4)
 
-Tự động hoá cài đặt Minecraft (TL1) cho phòng net: download TLauncher, setup Java (GraalVM), config launcher.
+Auto setup Minecraft (TL1) + Upload versions to Drive (TL2) for net cafe.
 
-## Flow TL1 (Download & Setup)
+## Flow
 
+**TL1 (Player setup):**
 ```
-Main.ps1 → Python embed → Download.py → Exec.py → CustomCore.py
+Main.ps1 -> Python embed -> Download.py -> Exec.py -> CustomCore.py
 ```
 
-1. **Main.ps1** - Menu chọn, tải Python embed, gọi tuần tự các script Python
-2. **Download.py** - Tải TLauncher.exe + GraalVM.zip + versions.zip (retry 3 lần, Google Drive handler)
-3. **Exec.py** - Chạy TLauncher installer (HITL), extract GraalVM → C:\Java\, cài versions vào .minecraft\
-4. **CustomCore.py** - Ghi java config vào .tlauncher\
+**TL2 (Upload versions):**
+```
+Main.ps1 -> Decode.py -> Shield.py -> Menu2.py -> Upload.py / Manager.ps1
+```
 
-## Cách dùng
+## TL1: Download & Setup
 
-### Chạy trực tiếp (RAM, không cần clone)
+1. **Main.ps1** - Menu, dl Python embed, call Python scripts
+2. **Download.py** - DL TLauncher.exe + GraalVM.zip + versions.zip (retry 3x, Drive handler)
+3. **Exec.py** - Run TLauncher installer (HITL), extract GraalVM -> C:\Java\, install versions
+4. **CustomCore.py** - Write java config to .tlauncher\
+
+## TL2: Upload & Manage Versions
+
+1. **Decode.py** - AES256 decrypt nothing.enc -> Code.txt (Drive creds)
+2. **Shield.py** - Discord 4-digit code verification
+3. **Menu2.py** - Menu: Upload / Manager
+4. **Upload.py** - Zip `.minecraft\versions\` to `.minecraft\versions-YYYY-MM-DD.zip`, upload to Drive (300s timeout)
+5. **Manager.ps1** - Interactive UI: arrow nav, space toggle, UTF-8 output
+
+## Quick start
+
+**Run directly (RAM, no clone):**
 ```powershell
 irm https://raw.githubusercontent.com/Lynstria/AutomationMinecraftInternetBar/main/Main.ps1 | iex
 ```
 
-### Chạy từ repo
+**Run from repo:**
 ```powershell
 .\Main.ps1
 ```
-Chọn **1** để bắt đầu TL1 pipeline.
+Choose **1** for TL1, **2** for TL2.
 
-## Cấu trúc
+## Structure
 
 ```
 AutomationMinecraftInternetBar/
-├── Main.ps1                          # Entry point (PowerShell)
+├── Main.ps1                        # Entry (PS, UTF-8)
 ├── TL1/
-│   ├── Download.py                     # Tải 3 files (stdlib only)
-│   ├── Exec.py                        # Install TLauncher + setup Java
-│   ├── CustomCore.py                  # Write java config to .tlauncher
-│   └── minecraft_tlauncher_java_config.json  # Java config template
+│   ├── Download.py                  # DL 3 files (stdlib only, UTF-8)
+│   ├── Exec.py                     # Install TLauncher + Java
+│   ├── CustomCore.py               # Write java config
+│   └── minecraft_tlauncher_java_config.json
+├── TL2/
+│   ├── Decode.py                   # AES decrypt (UTF-8)
+│   ├── Shield.py                   # Discord verify (UTF-8)
+│   ├── Menu2.py                   # TL2 menu (UTF-8)
+│   ├── Manager.ps1                # Drive file manager (UTF-8, arrow nav)
+│   ├── Stage_upload/
+│   │   ├── Upload.py             # Zip + upload (UTF-8, 300s timeout)
+│   │   └── Manager.py           # List Drive files -> JSON (UTF-8)
+│   └── lib_pure/
+│       └── aes_pure.py            # AES256 pure Python (UTF-8)
 └── docs/
     ├── planning-session-2026-05-05.md
     └── issues/
 ```
 
-## Yêu cầu
+## Requirements
 
 - Windows 10/11
-- PowerShell 5.1+
-- Internet (download TLauncher, GraalVM, versions)
-- Quyền cài đặt (TLauncher installer cần admin prompt nếu UAC bật)
+- PowerShell 5.1+ (UTF-8 support)
+- Internet (DL TLauncher, GraalVM, versions)
+- Admin for TLauncher installer (UAC)
 
 ## Tech stack
 
-- **PowerShell** - Orchestration, menu, logging (Start-Transcript)
-- **Python 3.11.9 embed** - Chạy .py scripts (stdlib only, không pip)
-- **Logging** - PowerShell → Desktop\mc-automation(HH-dd-MM).log, Python → same + _python.log
+- **PowerShell** - Orchestration, menu, logging (UTF-8 output)
+- **Python 3.11.9 embed** - Scripts (stdlib only, no pip, UTF-8)
+- **AES256** - Pure Python decrypt (no external lib)
+- **Google Drive API** - Upload versions via refresh_token
 
-## xử lý lỗi
+## Error handling
 
-- Retry 3 lần cho mỗi file tải (Download.py)
-- Fallback: Nếu GitHub raw 404 → copy local file (khi chạy từ repo)
-- Temp files: `%TEMP%\python_embed\`, `%TEMP%\mc_path.txt`, `%TEMP%\mc_log_path.txt`
-- Cleanup: Menu option 2 xoá hết temp + log
+- Retry 3x per download (Download.py)
+- Fallback: GitHub raw 404 -> copy local file
+- Temp: `%TEMP%\python_embed\`, cleanup option in menu
+- Upload timeout: 60s -> 300s (fixed 2026-05-08)
 
-## Trạng thái
+## Status
 
-- [x] TL1: Download + Install + Java setup (hoàn thành 2026-05-06)
-- [ ] TL2: Coming soon (Upload/Update maps)
+- [x] TL1: Download + Install + Java setup (done 2026-05-06)
+- [x] TL2: Upload versions to Drive (done 2026-05-08)
+- [x] Manager.ps1: UTF-8 + arrow nav + space toggle (fixed 2026-05-08)
+- [x] Upload.py: Direct zip to .minecraft + upload log (fixed 2026-05-08)
 
 ## License
 
