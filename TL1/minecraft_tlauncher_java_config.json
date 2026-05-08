@@ -5,8 +5,8 @@
       "name": "graalvm-jdk-17.0.12+8.1",
       "path": "C:\\Java\\graalvm-jdk-17.0.12+8.1",
       "args": [
-        "-Xmx14G",
-        "-Xms14G",
+        "-Xmx12G",
+        "-Xms12G",
         "-XX:+UseG1GC",
         "-XX:+ParallelRefProcEnabled",
         "-XX:MaxGCPauseMillis=200",
