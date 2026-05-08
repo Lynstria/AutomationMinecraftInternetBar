@@ -50,48 +50,111 @@ def _parse_gdrive_form(html):
     return action, fields
 
 
+def _is_html(data):
+    """Check if data starts with HTML tags."""
+    if not data:
+        return False
+    head = data[:512].strip().lower()
+    return head.startswith(b"<!doctype") or head.startswith(b"<html") or b"<html" in head
+
+
 def _download_gdrive(url, dest, timeout=300):
     """Download from Google Drive with streaming. Handle virus warning confirm."""
-    import tempfile
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+
+    # First request
     req = urllib.request.Request(url, headers=headers)
     try:
         resp = urllib.request.urlopen(req, timeout=timeout)
-        body = resp.read()
+        first_chunk = resp.read(8192)
     except urllib.error.HTTPError as e:
-        body = e.read()
+        first_chunk = e.read(8192) if hasattr(e, 'read') else b""
+        resp = e
+    except Exception:
+        return False
 
-    html = body.decode("utf-8", errors="ignore")
+    if not first_chunk:
+        return False
 
-    # Check for virus warning page
-    if "Virus scan warning" in html or "download_warning" in html:
-        action, fields = _parse_gdrive_form(html)
-        if action and fields:
-            params = "&".join(f"{k}={v}" for k, v in fields.items())
-            url = action + "?" + params
-            req = urllib.request.Request(url, headers=headers)
+    # Check if response is virus warning page
+    if _is_html(first_chunk):
+        html_bytes = first_chunk
+        if hasattr(resp, 'read'):
             try:
-                resp = urllib.request.urlopen(req, timeout=timeout)
-            except urllib.error.HTTPError as e:
-                resp = e
+                html_bytes += resp.read()
+            except:
+                pass
+        html = html_bytes.decode("utf-8", errors="ignore")
 
-            # Stream to temp file
-            tmp = dest + ".part"
-            with open(tmp, "wb") as f:
-                while True:
-                    chunk = resp.read(8192)
-                    if not chunk:
-                        break
-                    f.write(chunk)
-            os.replace(tmp, dest)
-            return os.path.exists(dest) and os.path.getsize(dest) > 1000
+        # Extract confirm token
+        token = None
+        m = re.search(r'name="confirm"[^>]*value="([^"]*)"', html)
+        if m:
+            token = m.group(1)
+        if not token:
+            m = re.search(r'"download_warning"\s*:\s*"([^"]+)"', html)
+            if m:
+                token = m.group(1)
 
-    # Direct download (small file)
+        if not token:
+            return False
+
+        # Retry with confirm token
+        sep = "&" if "?" in url else "?"
+        url2 = url + sep + "confirm=" + token
+        req2 = urllib.request.Request(url2, headers=headers)
+        try:
+            resp2 = urllib.request.urlopen(req2, timeout=timeout)
+            return _stream_to_file(resp2, dest, timeout)
+        except Exception:
+            return False
+
+    # Not virus warning - stream the file
+    class FakeResp:
+        def __init__(self, first, resp):
+            self.first = first
+            self.resp = resp
+            self._used = False
+        def read(self, n=-1):
+            if not self._used:
+                self._used = True
+                return self.first
+            if self.resp:
+                try:
+                    return self.resp.read(n)
+                except:
+                    pass
+            return b""
+
+    fake = FakeResp(first_chunk, resp if 'resp' in dir() else None)
+    return _stream_to_file(fake, dest, timeout)
+
+
+def _stream_to_file(resp, dest, timeout=300):
+    """Stream response to temp file, then atomically replace."""
     tmp = dest + ".part"
-    with open(tmp, "wb") as f:
-        f.write(body)
-    os.replace(tmp, dest)
-    return os.path.exists(dest) and os.path.getsize(dest) > 1000
+    try:
+        with open(tmp, "wb") as f:
+            while True:
+                try:
+                    chunk = resp.read(8192)
+                except:
+                    break
+                if not chunk:
+                    break
+                f.write(chunk)
+        if os.path.exists(tmp) and os.path.getsize(tmp) > 0:
+            os.replace(tmp, dest)
+            return True
+        return False
+    except Exception:
+        return False
+    finally:
+        if os.path.exists(tmp):
+            try:
+                os.remove(tmp)
+            except:
+                pass
 
 
 def download_file(url, dest, retries=3, timeout=300):
@@ -104,15 +167,7 @@ def download_file(url, dest, retries=3, timeout=300):
             headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
             req = urllib.request.Request(url, headers=headers)
             with urllib.request.urlopen(req, timeout=timeout) as resp:
-                tmp = dest + ".part"
-                with open(tmp, "wb") as f:
-                    while True:
-                        chunk = resp.read(8192)
-                        if not chunk:
-                            break
-                        f.write(chunk)
-                os.replace(tmp, dest)
-            return os.path.exists(dest) and os.path.getsize(dest) > 0
+                return _stream_to_file(resp, dest, timeout)
         except Exception:
             if attempt < retries - 1:
                 time.sleep(2 * (attempt + 1))
@@ -143,7 +198,7 @@ def download_versions(dest_dir):
 
 
 def setup_logging():
-    """Setup logging. Read log path from %TEMP%\mc_log_path.txt."""
+    """Setup logging. Read log path from %TEMP%\\mc_log_path.txt."""
     import logging
     log_path_file = os.path.join(os.environ.get("TEMP", "C:\\Temp"), "mc_log_path.txt")
     if os.path.exists(log_path_file):
@@ -193,7 +248,7 @@ def run_downloads(dest_dir=None):
 
     # Write download dir path to mc_path.txt
     mc_path_file = os.path.join(os.environ.get("TEMP", "C:\\Temp"), "mc_path.txt")
-    with open(mc_path_file, "w") as f:
+    with open(mc_path_file, "w", encoding="utf-8") as f:
         f.write(dest_dir)
 
     logger.info("Download dir written to %s", mc_path_file)
