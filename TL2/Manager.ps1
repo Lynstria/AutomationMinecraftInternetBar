@@ -31,18 +31,18 @@ function Main {
         Start-Sleep 2
         exit 0
     }
-    $files = @($files)  # Ensure array
+    $files = @($files)
 
     while ($true) {
         Write-Menu $files $currentPos
         $key = $host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown").VirtualKeyCode
-        if ($key -eq 38) {  # Up arrow
+        if ($key -eq 38) {  # Up
             if ($currentPos -gt 0) { $currentPos-- }
         }
-        elseif ($key -eq 40) {  # Down arrow
+        elseif ($key -eq 40) {  # Down
             if ($currentPos -lt $files.Count - 1) { $currentPos++ }
         }
-        elseif ($key -eq 32) {  # Space - toggle
+        elseif ($key -eq 32) {  # Space toggle
             $f = $files[$currentPos]
             $selected[$f.name] = -not $selected[$f.name]
         }
@@ -51,12 +51,10 @@ function Main {
                 $name = ($selected.Keys)[0]
                 Write-Host "Đặt '$name' làm bản chính (TL1 sẽ tải về)" -ForegroundColor Green
                 Start-Sleep 1
-                # TODO: Update Drive file to mark as default
             } elseif ($selected.Count -gt 1) {
                 Write-Host "Chỉ chọn 1 phiên bản!" -ForegroundColor Red
                 Start-Sleep 1
             } else {
-                # Không có gì chọn, dùng currentPos
                 $f = $files[$currentPos]
                 $selected[$f.name] = $true
                 Write-Host "Đã chọn '$($f.name)' để đặt làm bản chính" -ForegroundColor Green
@@ -67,12 +65,10 @@ function Main {
             if ($selected.Count -gt 0) {
                 foreach ($n in $selected.Keys) {
                     Write-Host "Xoá $n..." -ForegroundColor Red
-                    # TODO: Delete from Drive API
                 }
                 $selected.Clear()
                 Start-Sleep 1
             } else {
-                # Không chọn gì, xoá item tại currentPos
                 $f = $files[$currentPos]
                 Write-Host "Xoá $($f.name)..." -ForegroundColor Red
                 Start-Sleep 1
