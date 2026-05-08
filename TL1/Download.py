@@ -167,7 +167,9 @@ def _stream_to_file(resp, dest, timeout=300):
                 f.write(chunk)
                 downloaded += len(chunk)
                 if downloaded % (10 * 1024 * 1024) < 8192:  # Log every ~10MB
-                    logger.info("[_stream_to_file] Downloaded %d MB", downloaded // (1024 * 1024))
+                    mb = downloaded // (1024 * 1024)
+                    print(f"[INFO] Downloaded {mb} MB", flush=True)
+                    logger.info("[_stream_to_file] Downloaded %d MB", mb)
         logger.info("[_stream_to_file] Loop done, downloaded=%d, tmp exists=%s",
                     downloaded, os.path.exists(tmp))
         if os.path.exists(tmp) and os.path.getsize(tmp) > 0:
@@ -241,13 +243,20 @@ def setup_logging():
     else:
         log_file = os.path.join(os.environ.get("TEMP", "C:\\Temp"), "download.log")
 
-    logging.basicConfig(
-        filename=log_file,
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S"
-    )
-    return logging.getLogger(__name__)
+    # Use module-level logger directly
+    global logger
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.INFO)
+    # Clear old handlers to avoid duplicates
+    logger.handlers.clear()
+
+    # File handler only (console output via print for real-time progress)
+    fh = logging.FileHandler(log_file, encoding="utf-8")
+    fh.setLevel(logging.INFO)
+    fh.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s", "%Y-%m-%d %H:%M:%S"))
+    logger.addHandler(fh)
+
+    return logger
 
 
 def run_downloads(dest_dir=None):
