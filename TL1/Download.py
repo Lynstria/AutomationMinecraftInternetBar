@@ -8,6 +8,28 @@ import sys
 import urllib.request
 import time
 import re
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+class FakeResp:
+    """Wrapper to handle first-chunk + remaining response."""
+    def __init__(self, first, resp):
+        self.first = first
+        self.resp = resp
+        self._used = False
+
+    def read(self, n=-1):
+        if not self._used:
+            self._used = True
+            return self.first
+        if self.resp:
+            try:
+                return self.resp.read(n)
+            except:
+                pass
+        return b""
 
 
 TLUANCHER_FALLBACK = "https://dl1.tlauncher.org/f.php?f=files%2FTLauncher-Installer-1.9.5.1.exe"
@@ -60,6 +82,7 @@ def _is_html(data):
 
 def _download_gdrive(url, dest, timeout=300):
     """Download from Google Drive with streaming. Handle virus warning confirm."""
+    logger.info("[_download_gdrive] START url=%s dest=%s timeout=%s", url, dest, timeout)
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
 
     # First request
@@ -67,17 +90,23 @@ def _download_gdrive(url, dest, timeout=300):
     try:
         resp = urllib.request.urlopen(req, timeout=timeout)
         first_chunk = resp.read(8192)
+        logger.info("[_download_gdrive] First request OK, first_chunk size=%d", len(first_chunk))
     except urllib.error.HTTPError as e:
         first_chunk = e.read(8192) if hasattr(e, 'read') else b""
         resp = e
-    except Exception:
+        logger.warning("[_download_gdrive] HTTPError, first_chunk size=%d", len(first_chunk))
+    except Exception as e:
+        logger.error("[_download_gdrive] Exception: %s", e)
         return False
 
     if not first_chunk:
+        logger.error("[_download_gdrive] first_chunk is empty, return False")
         return False
 
     # Check if response is virus warning page
-    if _is_html(first_chunk):
+    is_html = _is_html(first_chunk)
+    logger.info("[_download_gdrive] is_html=%s", is_html)
+    if is_html:
         html_bytes = first_chunk
         if hasattr(resp, 'read'):
             try:
@@ -88,57 +117,33 @@ def _download_gdrive(url, dest, timeout=300):
 
         # Parse form from virus warning page
         action, fields = _parse_gdrive_form(html)
+        logger.info("[_download_gdrive] Form parsed: action=%s fields=%s", action, list(fields.keys()))
         if not action or "confirm" not in fields:
+            logger.error("[_download_gdrive] Form parse failed: action=%s has_confirm=%s", action, "confirm" in fields)
             return False
 
         # Build URL from form action + all fields
         params = "&".join(f"{k}={v}" for k, v in fields.items())
         url2 = action + "?" + params
+        logger.info("[_download_gdrive] Retry URL (first 100 chars): %s", url2[:100])
         req2 = urllib.request.Request(url2, headers=headers)
         try:
             resp2 = urllib.request.urlopen(req2, timeout=timeout)
+            logger.info("[_download_gdrive] Retry response received")
             # Check if still HTML (some cases need additional auth)
             chunk2 = resp2.read(8192)
             if _is_html(chunk2):
+                logger.error("[_download_gdrive] Retry still returns HTML, aborting")
                 return False
-            # Stream remaining data
-            class FakeResp2:
-                def __init__(self, first, resp):
-                    self.first = first
-                    self.resp = resp
-                    self._used = False
-                def read(self, n=-1):
-                    if not self._used:
-                        self._used = True
-                        return self.first
-                    if self.resp:
-                        try:
-                            return self.resp.read(n)
-                        except:
-                            pass
-                    return b""
-            fake2 = FakeResp2(chunk2, resp2)
+            logger.info("[_download_gdrive] Retry OK, first chunk size=%d, starting stream...", len(chunk2))
+            fake2 = FakeResp(chunk2, resp2)
             return _stream_to_file(fake2, dest, timeout)
-        except Exception:
+        except Exception as e:
+            logger.error("[_download_gdrive] Retry exception: %s", e)
             return False
 
     # Not virus warning - stream the file
-    class FakeResp:
-        def __init__(self, first, resp):
-            self.first = first
-            self.resp = resp
-            self._used = False
-        def read(self, n=-1):
-            if not self._used:
-                self._used = True
-                return self.first
-            if self.resp:
-                try:
-                    return self.resp.read(n)
-                except:
-                    pass
-            return b""
-
+    logger.info("[_download_gdrive] Not virus warning, streaming directly")
     fake = FakeResp(first_chunk, resp if 'resp' in locals() else None)
     return _stream_to_file(fake, dest, timeout)
 
@@ -146,32 +151,47 @@ def _download_gdrive(url, dest, timeout=300):
 def _stream_to_file(resp, dest, timeout=300):
     """Stream response to temp file, then atomically replace."""
     tmp = dest + ".part"
+    downloaded = 0
+    logger.info("[_stream_to_file] START dest=%s tmp=%s", dest, tmp)
     try:
         with open(tmp, "wb") as f:
             while True:
                 try:
                     chunk = resp.read(8192)
-                except:
+                except Exception as e:
+                    logger.warning("[_stream_to_file] Read exception: %s, downloaded=%d", e, downloaded)
                     break
                 if not chunk:
+                    logger.info("[_stream_to_file] Empty chunk, breaking")
                     break
                 f.write(chunk)
+                downloaded += len(chunk)
+                if downloaded % (10 * 1024 * 1024) < 8192:  # Log every ~10MB
+                    logger.info("[_stream_to_file] Downloaded %d MB", downloaded // (1024 * 1024))
+        logger.info("[_stream_to_file] Loop done, downloaded=%d, tmp exists=%s",
+                    downloaded, os.path.exists(tmp))
         if os.path.exists(tmp) and os.path.getsize(tmp) > 0:
+            logger.info("[_stream_to_file] Calling os.replace(%s -> %s), size=%d",
+                        tmp, dest, os.path.getsize(tmp))
             os.replace(tmp, dest)
+            logger.info("[_stream_to_file] os.replace done, dest exists=%s", os.path.exists(dest))
             return True
+        else:
+            logger.error("[_stream_to_file] NOT calling os.replace: exists=%s size=%s",
+                        os.path.exists(tmp), os.path.getsize(tmp) if os.path.exists(tmp) else "N/A")
         return False
-    except Exception:
+    except Exception as e:
+        logger.error("[_stream_to_file] Exception: %s, downloaded=%d, tmp exists=%s",
+                    e, downloaded, os.path.exists(tmp))
+        # Keep .part file on error for debugging (don't delete)
         return False
-    finally:
-        if os.path.exists(tmp):
-            try:
-                os.remove(tmp)
-            except:
-                pass
 
 
 def download_file(url, dest, retries=3, timeout=300):
     """Download URL to dest with streaming. Retry on fail. Return True on success."""
+    # Increase timeout for Google Drive large files (1.4GB can take >5min)
+    if "drive.google.com" in url:
+        timeout = 600
     for attempt in range(retries):
         try:
             if "drive.google.com" in url:
@@ -181,7 +201,8 @@ def download_file(url, dest, retries=3, timeout=300):
             req = urllib.request.Request(url, headers=headers)
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 return _stream_to_file(resp, dest, timeout)
-        except Exception:
+        except Exception as e:
+            logger.warning("[download_file] Attempt %d/%d failed: %s", attempt+1, retries, e)
             if attempt < retries - 1:
                 time.sleep(2 * (attempt + 1))
     return False
@@ -190,7 +211,7 @@ def download_file(url, dest, retries=3, timeout=300):
 def download_tlauncher(dest_dir):
     """Download Tlauncher installer. Return path on success, None on fail."""
     dest = os.path.join(dest_dir, "Tlauncher-Installer-1.9.5.1.exe")
-    ok = download_file(TLUANCHER_FALLBACK, dest)
+    ok = download_file(TLAUNCHER_FALLBACK, dest)
     return dest if ok else None
 
 
@@ -248,14 +269,14 @@ def run_downloads(dest_dir=None):
     total = len(files)
     for name, display_name, func in files:
         idx += 1
-        print(f"[{idx}/{total}] Downloading {display_name}...")
+        print(f"[{idx}/{total}] Downloading {display_name}...", flush=True)
         logger.info("Downloading %s...", name)
         path = func(dest_dir)
         if path:
             logger.info("%s OK: %s", name, path)
             results[name] = path
         else:
-            print(f"  {display_name} FAILED!")
+            print(f"  {display_name} FAILED!", flush=True)
             logger.error("%s FAILED", name)
 
         # Delay 2s between files for network stability
