@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """Shield.py - Discord 4-digit code verification"""
 import sys, os, json, urllib.request, random

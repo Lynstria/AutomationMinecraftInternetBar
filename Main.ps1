@@ -1,4 +1,4 @@
-﻿# Main.ps1 - Automation Minecraft Internet Bar
+# Main.ps1 - Automation Minecraft Internet Bar
 # Pipeline: Download repo.zip -> python_embed -> TL1/TL2
 
 $OutputEncoding = [System.Text.Encoding]::UTF8
@@ -147,33 +147,27 @@ while ($true) {
     $hasError = $false
 
     if ($choice -eq "1") {
-        Write-Host "Starting TL1 pipeline..." -ForegroundColor Green
-
         try {
             # Download .py files to python_embed dir
             $pyFiles = @("Download.py", "Exec.py", "CustomCore.py", "minecraft_tlauncher_java_config.json")
-            Write-Host "Downloading TL1 files..." -ForegroundColor Cyan
             $total = $pyFiles.Count
             $count = 0
             foreach ($file in $pyFiles) {
                 $count++
-                $percent = [math]::Floor(($count / $total) * 100)
-                Write-Progress -Activity "TL1 files" -PercentComplete $percent
+                Write-Host "[$count/$total] Downloading $file..." -ForegroundColor Cyan
                 $url = "$RAW_BASE/$file"
                 $dest = Join-Path $embedDir $file
                 try {
                     Invoke-WebRequest -Uri $url -OutFile $dest -Headers $headers -TimeoutSec 60
                 } catch {
-                    Write-Host "`nWarning: Failed to download $file from GitHub: $_" -ForegroundColor Yellow
+                    Write-Host "  Warning: Failed to download $file from GitHub: $_" -ForegroundColor Yellow
                     $localFile = Join-Path $PSScriptRoot "TL1\$file"
                     if (Test-Path $localFile) {
                         Copy-Item $localFile $dest -Force
-                        Write-Host "Used local copy of $file" -ForegroundColor Green
+                        Write-Host "  Used local copy of $file" -ForegroundColor Green
                     }
                 }
             }
-            Write-Progress -Activity "TL1 files" -Completed
-            Write-Host ""
 
             # Run Download.py
             $ok = Invoke-PythonScript -pythonDir $embedDir -scriptName "Download.py"

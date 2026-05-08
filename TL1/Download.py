@@ -50,8 +50,9 @@ def _parse_gdrive_form(html):
     return action, fields
 
 
-def _download_gdrive(url, dest, timeout=60):
-    """Download from Google Drive. Handle virus warning confirm."""
+def _download_gdrive(url, dest, timeout=300):
+    """Download from Google Drive with streaming. Handle virus warning confirm."""
+    import tempfile
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
     req = urllib.request.Request(url, headers=headers)
     try:
@@ -66,23 +67,35 @@ def _download_gdrive(url, dest, timeout=60):
     if "Virus scan warning" in html or "download_warning" in html:
         action, fields = _parse_gdrive_form(html)
         if action and fields:
-            # Build URL with form fields
             params = "&".join(f"{k}={v}" for k, v in fields.items())
             url = action + "?" + params
             req = urllib.request.Request(url, headers=headers)
             try:
                 resp = urllib.request.urlopen(req, timeout=timeout)
-                body = resp.read()
             except urllib.error.HTTPError as e:
-                body = e.read()
+                resp = e
 
-    with open(dest, "wb") as f:
+            # Stream to temp file
+            tmp = dest + ".part"
+            with open(tmp, "wb") as f:
+                while True:
+                    chunk = resp.read(8192)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+            os.replace(tmp, dest)
+            return os.path.exists(dest) and os.path.getsize(dest) > 1000
+
+    # Direct download (small file)
+    tmp = dest + ".part"
+    with open(tmp, "wb") as f:
         f.write(body)
+    os.replace(tmp, dest)
     return os.path.exists(dest) and os.path.getsize(dest) > 1000
 
 
-def download_file(url, dest, retries=3, timeout=60):
-    """Download URL to dest. Retry on fail. Return True on success."""
+def download_file(url, dest, retries=3, timeout=300):
+    """Download URL to dest with streaming. Retry on fail. Return True on success."""
     for attempt in range(retries):
         try:
             if "drive.google.com" in url:
@@ -91,8 +104,14 @@ def download_file(url, dest, retries=3, timeout=60):
             headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
             req = urllib.request.Request(url, headers=headers)
             with urllib.request.urlopen(req, timeout=timeout) as resp:
-                with open(dest, "wb") as f:
-                    f.write(resp.read())
+                tmp = dest + ".part"
+                with open(tmp, "wb") as f:
+                    while True:
+                        chunk = resp.read(8192)
+                        if not chunk:
+                            break
+                        f.write(chunk)
+                os.replace(tmp, dest)
             return os.path.exists(dest) and os.path.getsize(dest) > 0
         except Exception:
             if attempt < retries - 1:
@@ -152,19 +171,24 @@ def run_downloads(dest_dir=None):
 
     results = {}
     files = [
-        ("tlauncher", download_tlauncher),
-        ("graalvm", download_graalvm),
-        ("versions", download_versions),
+        ("tlauncher", "Tlauncher-Installer-1.9.5.1.exe", download_tlauncher),
+        ("graalvm", "GraalVM.zip", download_graalvm),
+        ("versions", "versions.zip", download_versions),
     ]
 
-    for name, func in files:
+    idx = 0
+    for name, display_name, func in files:
+        idx += 1
+        print(f"[{idx}/3] Downloading {display_name}...")
         logger.info("Downloading %s...", name)
         path = func(dest_dir)
         if path:
             size = os.path.getsize(path)
+            print(f"  {display_name} OK ({size} bytes)")
             logger.info("%s OK: %s (%d bytes)", name, path, size)
             results[name] = path
         else:
+            print(f"  {display_name} FAILED!")
             logger.error("%s FAILED", name)
 
     # Write download dir path to mc_path.txt

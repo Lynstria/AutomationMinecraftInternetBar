@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """Upload.py - Zip versions/ and update Drive file"""
 import sys, os, json, zipfile, datetime, urllib.request, urllib.parse

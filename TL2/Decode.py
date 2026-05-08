@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """Decode.py - AES256 decrypt nothing.enc, test Discord API, write Code.txt"""
 import sys, os, json, urllib.request, urllib.error
